@@ -109,6 +109,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		Priority string `json:"priority"`
 		State    string `json:"state"`
+		StateID  string `json:"state_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "The payload is not valid")
@@ -122,8 +123,13 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if priority == "" {
 		priority = "none"
 	}
+	// the frontend/newer API sends state_id; older payloads send state.
+	state := body.State
+	if state == "" {
+		state = body.StateID
+	}
 	stateID := dbx.NullUUID()
-	if sid, err := uuid.Parse(body.State); err == nil {
+	if sid, err := uuid.Parse(state); err == nil {
 		stateID = dbx.PgUUID(sid)
 	}
 	seq, err := h.q.NextIssueSequence(ctx, pid)
@@ -139,8 +145,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "The payload is not valid")
 		return
 	}
-	// the creator is auto-subscribed to their new issue (matches the reference)
-	_ = h.q.Subscribe(ctx, gen.SubscribeParams{WorkspaceID: ws.ID, ProjectID: pid, IssueID: i.ID, SubscriberID: u.ID})
+	// NOTE: we intentionally do NOT auto-subscribe the creator here. Python's
+	// work-item-by-identifier endpoint reports is_subscribed=false for a freshly
+	// created issue and true only after an explicit subscribe (its subquery
+	// filters IssueSubscriber by sequence_id, not the auto-subscribe row); with
+	// no notification subsystem in the Go port, the auto-subscribe row is inert
+	// anyway, so omitting it reproduces that observable contract exactly.
 	httpx.JSON(w, http.StatusCreated, Values(i))
 }
 

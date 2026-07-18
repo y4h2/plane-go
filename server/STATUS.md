@@ -9,9 +9,9 @@ _Last updated: 2026-07-18_
 
 | Metric | Value |
 |---|---|
-| Go route patterns implemented | ~160 distinct paths |
+| Go route patterns implemented | ~165 distinct paths |
 | Django app-API endpoints (total) | 233 |
-| Contract tests (black-box, Go↔Python parity) | **336, all green on BOTH Go and Python** |
+| Contract tests (black-box, Go↔Python parity) | **357, all green on BOTH Go and Python** |
 | Migrations | 0001–0026 |
 | Full app runs against Go in a browser | ✅ (signup → onboarding → projects → issues → cycles) |
 
@@ -32,7 +32,7 @@ Status: ✅ complete · 🟡 core done, secondary actions missing · ❌ not sta
 | project | 20 | 🟡 | CRUD, details, members CRUD+role, members/me, project-roles, identifiers, favorites, cover image, archive/unarchive (+404 on archived detail), project-stats | search-issues, features |
 | issue | 40 | 🟡 | CRUD, list (envelope+group_by), list-by-ids, comments, links, sub-issues (r/w), subscribers, subscribe, reactions, meta, relations (r/w + inverse), attachments (list), archive/unarchive, bulk-delete, bulk-archive, history (stub) | real activity feed, drafts, issue-dates, deleted-issues, versions, work-item identifier lookup |
 | cycle | 14 | ✅ | CRUD, cycle-issues, favorites, transfer-issues, date-check, progress, analytics (burndown), archive/unarchive + archived-cycles | — |
-| module | 13 | 🟡 | CRUD, module-issues, favorites, links, archive/unarchive + archived-modules | analytics |
+| module | 13 | ✅ | CRUD, module-issues, favorites, links, archive/unarchive + archived-modules, embedded progress counts + distribution | — |
 | views | 7 | ✅ | CRUD (workspace + project), favorite-views, workspace-level issue list | — |
 | issue-extras | — | ✅ | draft-issues CRUD + draft-to-issue, bulk issue-dates; issue start/target dates now surfaced | — |
 | estimate | 5 | ✅ | create, list, retrieve, update (400 without points), delete | — |
@@ -64,6 +64,7 @@ sign-up/in/out, get-csrf-token, email-check.
 - **Search + estimate/project round-out + asset fixes** — global search, entity(@mention) search, project-stats (with `fields`/`project_ids` selection); estimate update/delete (PATCH 400 without points); project archive/unarchive (+404 on archived detail); asset entity_type validation (400), PATCH-confirm→204 + 404 on missing; issue `remove-relation` POST route. + 5 backfill test modules for the run-it/UI-walk/issue-action batches.
 - **Remaining-module wave (7 parallel agents, each with e2e tests frozen on Python)** — **api-tokens** (CRUD, mig 0021), **webhooks** (CRUD + regenerate + logs, mig 0020), **intake/triage** (CRUD + status transitions, lazy default-intake, mig 0019), **pages** (metadata CRUD/archive/lock/favorite/duplicate, mig 0022; live-sync endpoints skipped), **analytics** (analytics + default-analytics), **exporter** (job create/list, mig 0023) + **external** (unsplash/AI unconfigured-key parity). → **275 tests, green on both servers.**
 - **Secondary-actions wave (4 parallel agents)** — **cycle+module archive/unarchive** + archived lists (mig 0024; added `archived_at` to cycles/modules, filtered their normal lists), **view favorites + workspace-level issue list** (mig 0025, reuses user_favorites), **draft-issues CRUD + bulk issue-dates** (mig 0026), **user change-password (/auth, +CSRF) + deactivate**. Fixed the shared issue `.values()` to surface real `start_date`/`target_date` (was hardcoded null). → **336 tests, green on both servers.**
+- **Tail wave (2 agents)** — **deleted-issues** list + **work-item-by-identifier** lookup (`/work-items/{IDENT}-{seq}/`); **module analytics** — modules expose progress counts + distribution embedded in the retrieve/list response (no separate endpoint in Django), wired into `internal/module`'s `.values()`. Integration fixes: issue create now accepts `state_id` (not just `state`); dropped the inert creator auto-subscribe so the identifier endpoint's `is_subscribed` matches Python (false until explicit subscribe). → **357 tests, green on both servers.**
 
 ## Remaining work — suggested order
 

@@ -26,6 +26,7 @@ import (
 	"planego/internal/intake"
 	"planego/internal/issue"
 	"planego/internal/issueextra"
+	"planego/internal/issuetail"
 	"planego/internal/label"
 	"planego/internal/module"
 	"planego/internal/page"
@@ -65,7 +66,7 @@ func main() {
 	st := state.New(q)
 	lb := label.New(q)
 	cy := cycle.New(q)
-	mo := module.New(q)
+	mo := module.New(q, pool)
 	vw := view.New(q)
 	upr := userprops.New(q)
 	est := estimate.New(q)
@@ -83,6 +84,7 @@ func main() {
 	ve := viewextra.New(pool)
 	ixe := issueextra.New(pool)
 	ux := userextra.New(pool)
+	it := issuetail.New(pool)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -133,6 +135,7 @@ func main() {
 			ve.Routes(r)
 			ixe.Routes(r)
 			ux.Routes(r)
+			it.Routes(r)
 		})
 	})
 

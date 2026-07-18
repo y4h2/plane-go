@@ -13,17 +13,41 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"planego/internal/auth"
 	"planego/internal/db/gen"
 	"planego/internal/dbx"
 	"planego/internal/httpx"
 	"planego/internal/issue"
+	"planego/internal/moduleanalytics"
 )
 
-type Handler struct{ q *gen.Queries }
+type Handler struct {
+	q    *gen.Queries
+	pool *pgxpool.Pool
+}
 
-func New(q *gen.Queries) *Handler { return &Handler{q: q} }
+func New(q *gen.Queries, pool *pgxpool.Pool) *Handler { return &Handler{q: q, pool: pool} }
+
+// withAnalytics merges a module's live progress counts + distribution/estimate
+// dicts into its base .values() dict. Django embeds this data directly in the
+// module retrieve/list/create responses (modules have no separate analytics
+// endpoint). Best-effort: on a compute error the hardcoded defaults stand.
+func (h *Handler) withAnalytics(ctx context.Context, base map[string]any, moduleID uuid.UUID) map[string]any {
+	if prog, err := moduleanalytics.Progress(ctx, h.pool, moduleID); err == nil {
+		for k, v := range prog {
+			base[k] = v
+		}
+	}
+	if dist, err := moduleanalytics.Distribution(ctx, h.pool, moduleID); err == nil {
+		base["distribution"] = dist
+	}
+	if est, err := moduleanalytics.EstimateDistribution(ctx, h.pool, moduleID); err == nil {
+		base["estimate_distribution"] = est
+	}
+	return base
+}
 
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/workspaces/{slug}/projects/{project_id}/modules/", h.create)
@@ -196,7 +220,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "The payload is not valid")
 		return
 	}
-	httpx.JSON(w, http.StatusCreated, moduleValues(m))
+	httpx.JSON(w, http.StatusCreated, h.withAnalytics(ctx, moduleValues(m), m.ID))
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +236,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(modules))
 	for _, m := range modules {
-		out = append(out, moduleValues(m))
+		out = append(out, h.withAnalytics(ctx, moduleValues(m), m.ID))
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
@@ -227,7 +251,7 @@ func (h *Handler) retrieve(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		return
 	}
-	httpx.JSON(w, http.StatusOK, moduleValues(m))
+	httpx.JSON(w, http.StatusOK, h.withAnalytics(ctx, moduleValues(m), m.ID))
 }
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +259,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	httpx.JSON(w, http.StatusOK, moduleValues(m))
+	httpx.JSON(w, http.StatusOK, h.withAnalytics(r.Context(), moduleValues(m), m.ID))
 }
 
 func (h *Handler) replace(w http.ResponseWriter, r *http.Request) {
@@ -386,7 +410,7 @@ func (h *Handler) workspaceModules(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(modules))
 	for _, m := range modules {
-		out = append(out, moduleValues(m))
+		out = append(out, h.withAnalytics(ctx, moduleValues(m), m.ID))
 	}
 	httpx.JSON(w, http.StatusOK, out)
 }
