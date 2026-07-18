@@ -10,23 +10,30 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"planego/internal/analytic"
+	"planego/internal/apitoken"
 	"planego/internal/asset"
 	"planego/internal/auth"
 	"planego/internal/config"
 	"planego/internal/estimate"
 	"planego/internal/cycle"
 	"planego/internal/db/gen"
+	"planego/internal/exporter"
+	"planego/internal/external"
 	"planego/internal/httpx"
 	"planego/internal/instance"
+	"planego/internal/intake"
 	"planego/internal/issue"
 	"planego/internal/label"
 	"planego/internal/module"
+	"planego/internal/page"
 	"planego/internal/project"
 	"planego/internal/search"
 	"planego/internal/state"
 	"planego/internal/user"
 	"planego/internal/userprops"
 	"planego/internal/view"
+	"planego/internal/webhook"
 	"planego/internal/workspace"
 	"planego/internal/wsextra"
 )
@@ -61,6 +68,13 @@ func main() {
 	wx := wsextra.New(q)
 	as := asset.New(q, cfg)
 	sr := search.New(q)
+	at := apitoken.New(pool)
+	wh := webhook.New(pool)
+	ik := intake.New(pool)
+	pg := page.New(pool)
+	ex := exporter.New(pool)
+	ext := external.New()
+	an := analytic.New(pool)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -95,6 +109,13 @@ func main() {
 			est.Routes(r)
 			wx.Routes(r)
 			sr.Routes(r)
+			at.Routes(r)
+			wh.Routes(r)
+			ik.Routes(r)
+			pg.Routes(r)
+			ex.Routes(r)
+			ext.Routes(r)
+			an.Routes(r)
 		})
 	})
 

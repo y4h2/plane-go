@@ -327,6 +327,12 @@ func (h *Handler) retrieve(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
 		return
 	}
+	// Python's retrieve() filters archived_at__isnull=True, so an archived
+	// project 404s from the normal detail route (unarchive it to see it again).
+	if p.ArchivedAt != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
 	u, _ := auth.UserFrom(ctx)
 	// permission: not a workspace member -> 403; workspace member but not a
 	// project member -> 409; project member -> 200.

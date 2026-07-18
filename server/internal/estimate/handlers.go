@@ -57,6 +57,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		} `json:"estimate_points"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	// Python guards: PATCH with no estimate_points is a 400.
+	if len(body.EstimatePoints) == 0 {
+		httpx.JSON(w, http.StatusBadRequest, map[string]any{"error": "Estimate points are required"})
+		return
+	}
 	name, typ := cur.Name, cur.Type
 	if body.Estimate.Name != "" {
 		name = body.Estimate.Name
