@@ -41,7 +41,45 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/projects/{project_id}/members/", h.listMembers)
 	r.Post("/workspaces/{slug}/projects/{project_id}/members/", h.addMembers)
 	r.Get("/workspaces/{slug}/projects/{project_id}/members/{member_id}/", h.retrieveMember)
+	r.Patch("/workspaces/{slug}/projects/{project_id}/members/{member_id}/", h.updateMember)
 	r.Get("/workspaces/{slug}/projects/{project_id}/project-members/me/", h.membersMe)
+}
+
+func (h *Handler) updateMember(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, ok := h.workspace(ctx, w, chi.URLParam(r, "slug"))
+	if !ok {
+		return
+	}
+	pid, err := uuid.Parse(chi.URLParam(r, "project_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	mrid, err := uuid.Parse(chi.URLParam(r, "member_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	var body struct {
+		Role *int `json:"role"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	pm, err := h.q.GetProjectMember(ctx, gen.GetProjectMemberParams{ProjectID: pid, ID: mrid})
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	role := pm.Role
+	if body.Role != nil {
+		role = int16(*body.Role)
+	}
+	updated, err := h.q.UpdateProjectMemberRole(ctx, gen.UpdateProjectMemberRoleParams{ProjectID: pid, ID: mrid, Role: role})
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, h.memberDetail(ctx, updated, ws))
 }
 
 // ---- response shapes -------------------------------------------------------

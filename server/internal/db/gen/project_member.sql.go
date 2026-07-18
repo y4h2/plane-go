@@ -148,3 +148,30 @@ func (q *Queries) ProjectMemberUserIDs(ctx context.Context, projectID uuid.UUID)
 	}
 	return items, nil
 }
+
+const updateProjectMemberRole = `-- name: UpdateProjectMemberRole :one
+update project_members set role = $3, updated_at = now()
+where project_id = $1 and id = $2
+returning id, project_id, workspace_id, member_id, role, created_at, updated_at
+`
+
+type UpdateProjectMemberRoleParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ID        uuid.UUID `json:"id"`
+	Role      int16     `json:"role"`
+}
+
+func (q *Queries) UpdateProjectMemberRole(ctx context.Context, arg UpdateProjectMemberRoleParams) (ProjectMember, error) {
+	row := q.db.QueryRow(ctx, updateProjectMemberRole, arg.ProjectID, arg.ID, arg.Role)
+	var i ProjectMember
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.WorkspaceID,
+		&i.MemberID,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
