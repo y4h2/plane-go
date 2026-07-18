@@ -1,0 +1,14 @@
+# Go
+/server/server
+/server/**/*.test
+/server/**/*.out
+
+# Python
+contract/.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor / OS
+.DS_Store
+*.swp

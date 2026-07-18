@@ -1,0 +1,17 @@
+# Postgres for the Go server. Publishes on host :4010 to match the server's
+# default DATABASE_URL (postgres://plane:plane@localhost:4010/plane_go).
+services:
+  db:
+    image: postgres:15.7-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: plane
+      POSTGRES_PASSWORD: plane
+      POSTGRES_DB: plane_go
+    ports:
+      - "4010:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
