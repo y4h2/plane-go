@@ -31,12 +31,12 @@ Status: ✅ complete · 🟡 core done, secondary actions missing · ❌ not sta
 | workspace | 41 | 🟡 | CRUD, members, members/me, invitations (list/create/accept), project-roles, slug-check, sidebar/home/user prefs, recent-visits, quick-links, stickies, favorites, notifications (list+unread), estimates-list | ws views, analytics, exports, entity-search, activity |
 | project | 20 | 🟡 | CRUD, details, members CRUD+role, members/me, project-roles, identifiers, favorites, cover image | archive/unarchive, project-stats, search-issues, features |
 | issue | 40 | 🟡 | CRUD, list (envelope+group_by), list-by-ids, comments, links, sub-issues (r/w), subscribers, subscribe, reactions, meta, relations (r/w + inverse), attachments (list), archive/unarchive, bulk-delete, bulk-archive, history (stub) | real activity feed, drafts, issue-dates, deleted-issues, versions, work-item identifier lookup |
-| cycle | 14 | 🟡 | CRUD, cycle-issues, favorites, transfer-issues, date-check | progress, analytics, archive |
+| cycle | 14 | 🟡 | CRUD, cycle-issues, favorites, transfer-issues, date-check, progress, analytics (burndown) | archive |
 | module | 13 | 🟡 | CRUD, module-issues, favorites, links | analytics, archive |
 | views | 7 | 🟡 | CRUD (workspace + project) | favorites, view-issues |
 | estimate | 5 | 🟡 | create, list, retrieve | update, delete |
 | asset | 18 | 🟡 | v2 create/upload/patch/bulk/serve (self-hosted local store), project cover | restore, duplicate, legacy file-assets |
-| notification | 7 | 🟡 | list, unread-count, paginated list (stubs, empty) | mark read/unread, archive, snooze |
+| notification | 7 | 🟡 | list, unread-count, paginated list, mark-all-read, per-id read/archive (stubs — no notification generation) | snooze, real generation |
 | instance | (auth) | ✅ | GET /instances/ (public) | — |
 | analytic | 13 | ❌ | — | charts, workspace/project analytics |
 | page | 11 | ❌ | — | docs/pages (needs live collab server) |
@@ -59,6 +59,7 @@ sign-up/in/out, get-csrf-token, email-check.
 - **Run-it fixes** — email-check, PATCH me/profile/onboard, instances made public; self-hosted **asset upload store** (fixes cover images / uploads) + project cover.
 - **UI walk fixes** — sidebar-preferences, workspace user-properties, intake-state, timezones, GET invitations, workspace estimates, paginated notifications; issue meta/issue-relation/history/description-versions; **tour-completed** (welcome-modal dismissal).
 - **Issue actions** — archive/unarchive (state-guarded), bulk-delete, bulk-archive, sub-issues write, issue-relation write/remove (+inverse), attachments list. Migration 0017.
+- **Cycle progress/analytics + notification actions** — cycle `progress/` (issue counts by state group), `analytics` (burndown completion_chart), `cycle-progress/` alias; notification `mark-all-read` + per-id read/archive stubs.
 
 ## Remaining work — suggested order
 

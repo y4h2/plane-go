@@ -37,6 +37,22 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/estimates/", h.emptyList)
 	r.Get("/workspaces/{slug}/users/notifications", h.notificationsPaginated)
 	r.Get("/timezones/", h.timezones)
+	// notification actions (the inbox is empty in this backend, so per-id actions
+	// are effectively no-ops; mark-all-read is still user-clickable)
+	r.Post("/workspaces/{slug}/users/notifications/mark-all-read/", h.markAllRead)
+	r.Post("/workspaces/{slug}/users/notifications/{notification_id}/read/", h.noContent)
+	r.Delete("/workspaces/{slug}/users/notifications/{notification_id}/read/", h.noContent)
+	r.Post("/workspaces/{slug}/users/notifications/{notification_id}/archive/", h.noContent)
+	r.Delete("/workspaces/{slug}/users/notifications/{notification_id}/archive/", h.noContent)
+	r.Patch("/workspaces/{slug}/users/notifications/{notification_id}/", h.noContent)
+}
+
+func (h *Handler) markAllRead(w http.ResponseWriter, _ *http.Request) {
+	httpx.JSON(w, http.StatusOK, map[string]string{"message": "Successful"})
+}
+
+func (h *Handler) noContent(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) sidebarPreferences(w http.ResponseWriter, _ *http.Request) {
