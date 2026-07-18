@@ -11,6 +11,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApiToken struct {
+	ID               uuid.UUID   `json:"id"`
+	Label            string      `json:"label"`
+	Description      string      `json:"description"`
+	IsActive         bool        `json:"is_active"`
+	LastUsed         *time.Time  `json:"last_used"`
+	Token            string      `json:"token"`
+	UserID           uuid.UUID   `json:"user_id"`
+	UserType         int16       `json:"user_type"`
+	WorkspaceID      pgtype.UUID `json:"workspace_id"`
+	ExpiredAt        *time.Time  `json:"expired_at"`
+	IsService        bool        `json:"is_service"`
+	AllowedRateLimit string      `json:"allowed_rate_limit"`
+	CreatedBy        pgtype.UUID `json:"created_by"`
+	UpdatedBy        pgtype.UUID `json:"updated_by"`
+	DeletedAt        *time.Time  `json:"deleted_at"`
+	CreatedAt        time.Time   `json:"created_at"`
+	UpdatedAt        time.Time   `json:"updated_at"`
+}
+
 type Asset struct {
 	ID               uuid.UUID   `json:"id"`
 	WorkspaceID      pgtype.UUID `json:"workspace_id"`
@@ -39,6 +59,7 @@ type Cycle struct {
 	DeletedAt   *time.Time  `json:"deleted_at"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+	ArchivedAt  *time.Time  `json:"archived_at"`
 }
 
 type CycleIssue struct {
@@ -48,6 +69,28 @@ type CycleIssue struct {
 	CycleID     uuid.UUID `json:"cycle_id"`
 	IssueID     uuid.UUID `json:"issue_id"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type DraftIssue struct {
+	ID              uuid.UUID   `json:"id"`
+	WorkspaceID     uuid.UUID   `json:"workspace_id"`
+	ProjectID       pgtype.UUID `json:"project_id"`
+	Name            *string     `json:"name"`
+	DescriptionHtml string      `json:"description_html"`
+	Priority        string      `json:"priority"`
+	StateID         pgtype.UUID `json:"state_id"`
+	ParentID        pgtype.UUID `json:"parent_id"`
+	EstimatePoint   pgtype.UUID `json:"estimate_point"`
+	TypeID          pgtype.UUID `json:"type_id"`
+	SortOrder       float64     `json:"sort_order"`
+	StartDate       pgtype.Date `json:"start_date"`
+	TargetDate      pgtype.Date `json:"target_date"`
+	CompletedAt     *time.Time  `json:"completed_at"`
+	CreatedBy       pgtype.UUID `json:"created_by"`
+	UpdatedBy       pgtype.UUID `json:"updated_by"`
+	DeletedAt       *time.Time  `json:"deleted_at"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
 type Estimate struct {
@@ -73,6 +116,61 @@ type EstimatePoint struct {
 	Key         int32       `json:"key"`
 	Value       string      `json:"value"`
 	Description string      `json:"description"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
+	DeletedAt   *time.Time  `json:"deleted_at"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type Exporter struct {
+	ID            uuid.UUID   `json:"id"`
+	Name          *string     `json:"name"`
+	Type          string      `json:"type"`
+	WorkspaceID   uuid.UUID   `json:"workspace_id"`
+	Project       []uuid.UUID `json:"project"`
+	Provider      string      `json:"provider"`
+	Status        string      `json:"status"`
+	Reason        string      `json:"reason"`
+	Key           string      `json:"key"`
+	Url           *string     `json:"url"`
+	Token         string      `json:"token"`
+	InitiatedByID uuid.UUID   `json:"initiated_by_id"`
+	Filters       []byte      `json:"filters"`
+	RichFilters   []byte      `json:"rich_filters"`
+	CreatedBy     pgtype.UUID `json:"created_by"`
+	UpdatedBy     pgtype.UUID `json:"updated_by"`
+	DeletedAt     *time.Time  `json:"deleted_at"`
+	CreatedAt     time.Time   `json:"created_at"`
+	UpdatedAt     time.Time   `json:"updated_at"`
+}
+
+type Intake struct {
+	ID          uuid.UUID   `json:"id"`
+	WorkspaceID uuid.UUID   `json:"workspace_id"`
+	ProjectID   uuid.UUID   `json:"project_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	IsDefault   bool        `json:"is_default"`
+	ViewProps   []byte      `json:"view_props"`
+	LogoProps   []byte      `json:"logo_props"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
+	DeletedAt   *time.Time  `json:"deleted_at"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type IntakeIssue struct {
+	ID          uuid.UUID   `json:"id"`
+	WorkspaceID uuid.UUID   `json:"workspace_id"`
+	ProjectID   uuid.UUID   `json:"project_id"`
+	IntakeID    uuid.UUID   `json:"intake_id"`
+	IssueID     uuid.UUID   `json:"issue_id"`
+	Status      int32       `json:"status"`
+	SnoozedTill *time.Time  `json:"snoozed_till"`
+	DuplicateTo pgtype.UUID `json:"duplicate_to"`
+	Source      *string     `json:"source"`
 	CreatedBy   pgtype.UUID `json:"created_by"`
 	UpdatedBy   pgtype.UUID `json:"updated_by"`
 	DeletedAt   *time.Time  `json:"deleted_at"`
@@ -183,6 +281,7 @@ type Module struct {
 	DeletedAt   *time.Time  `json:"deleted_at"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+	ArchivedAt  *time.Time  `json:"archived_at"`
 }
 
 type ModuleIssue struct {
@@ -192,6 +291,26 @@ type ModuleIssue struct {
 	ModuleID    uuid.UUID `json:"module_id"`
 	IssueID     uuid.UUID `json:"issue_id"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type Page struct {
+	ID              uuid.UUID   `json:"id"`
+	WorkspaceID     uuid.UUID   `json:"workspace_id"`
+	Name            string      `json:"name"`
+	Access          int16       `json:"access"`
+	Color           string      `json:"color"`
+	DescriptionHtml string      `json:"description_html"`
+	OwnedBy         uuid.UUID   `json:"owned_by"`
+	ParentID        pgtype.UUID `json:"parent_id"`
+	ArchivedAt      pgtype.Date `json:"archived_at"`
+	IsLocked        bool        `json:"is_locked"`
+	ViewProps       []byte      `json:"view_props"`
+	LogoProps       []byte      `json:"logo_props"`
+	CreatedBy       pgtype.UUID `json:"created_by"`
+	UpdatedBy       pgtype.UUID `json:"updated_by"`
+	DeletedAt       *time.Time  `json:"deleted_at"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
 type Project struct {
@@ -219,6 +338,18 @@ type ProjectMember struct {
 	Role        int16     `json:"role"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type ProjectPage struct {
+	ID          uuid.UUID   `json:"id"`
+	WorkspaceID uuid.UUID   `json:"workspace_id"`
+	ProjectID   uuid.UUID   `json:"project_id"`
+	PageID      uuid.UUID   `json:"page_id"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
+	DeletedAt   *time.Time  `json:"deleted_at"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
 type ProjectUserProperty struct {
@@ -306,6 +437,45 @@ type View struct {
 	DeletedAt         *time.Time  `json:"deleted_at"`
 	CreatedAt         time.Time   `json:"created_at"`
 	UpdatedAt         time.Time   `json:"updated_at"`
+}
+
+type Webhook struct {
+	ID           uuid.UUID   `json:"id"`
+	WorkspaceID  uuid.UUID   `json:"workspace_id"`
+	Url          string      `json:"url"`
+	IsActive     bool        `json:"is_active"`
+	SecretKey    string      `json:"secret_key"`
+	Project      bool        `json:"project"`
+	Issue        bool        `json:"issue"`
+	Module       bool        `json:"module"`
+	Cycle        bool        `json:"cycle"`
+	IssueComment bool        `json:"issue_comment"`
+	IsInternal   bool        `json:"is_internal"`
+	Version      string      `json:"version"`
+	CreatedBy    pgtype.UUID `json:"created_by"`
+	UpdatedBy    pgtype.UUID `json:"updated_by"`
+	DeletedAt    *time.Time  `json:"deleted_at"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+}
+
+type WebhookLog struct {
+	ID              uuid.UUID   `json:"id"`
+	WorkspaceID     uuid.UUID   `json:"workspace_id"`
+	Webhook         uuid.UUID   `json:"webhook"`
+	EventType       *string     `json:"event_type"`
+	RequestMethod   *string     `json:"request_method"`
+	RequestHeaders  *string     `json:"request_headers"`
+	RequestBody     *string     `json:"request_body"`
+	ResponseStatus  *string     `json:"response_status"`
+	ResponseHeaders *string     `json:"response_headers"`
+	ResponseBody    *string     `json:"response_body"`
+	RetryCount      int16       `json:"retry_count"`
+	CreatedBy       pgtype.UUID `json:"created_by"`
+	UpdatedBy       pgtype.UUID `json:"updated_by"`
+	DeletedAt       *time.Time  `json:"deleted_at"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
 }
 
 type Workspace struct {

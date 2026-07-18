@@ -38,7 +38,7 @@ func (q *Queries) AddModuleIssue(ctx context.Context, arg AddModuleIssueParams) 
 const createModule = `-- name: CreateModule :one
 insert into modules (workspace_id, project_id, name, description, status, created_by)
 values ($1, $2, $3, $4, $5, $6)
-returning id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at
+returning id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, archived_at
 `
 
 type CreateModuleParams struct {
@@ -74,12 +74,13 @@ func (q *Queries) CreateModule(ctx context.Context, arg CreateModuleParams) (Mod
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const getModule = `-- name: GetModule :one
-select id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at from modules where id = $1 and project_id = $2 and deleted_at is null
+select id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, archived_at from modules where id = $1 and project_id = $2 and deleted_at is null and archived_at is null
 `
 
 type GetModuleParams struct {
@@ -104,6 +105,7 @@ func (q *Queries) GetModule(ctx context.Context, arg GetModuleParams) (Module, e
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -158,7 +160,7 @@ func (q *Queries) ListModuleIssueIssues(ctx context.Context, moduleID uuid.UUID)
 }
 
 const listModules = `-- name: ListModules :many
-select id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at from modules where project_id = $1 and deleted_at is null order by created_at
+select id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, archived_at from modules where project_id = $1 and deleted_at is null and archived_at is null order by created_at
 `
 
 func (q *Queries) ListModules(ctx context.Context, projectID uuid.UUID) ([]Module, error) {
@@ -184,6 +186,7 @@ func (q *Queries) ListModules(ctx context.Context, projectID uuid.UUID) ([]Modul
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -196,7 +199,7 @@ func (q *Queries) ListModules(ctx context.Context, projectID uuid.UUID) ([]Modul
 }
 
 const listWorkspaceModules = `-- name: ListWorkspaceModules :many
-select id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at from modules where workspace_id = $1 and deleted_at is null order by created_at
+select id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, archived_at from modules where workspace_id = $1 and deleted_at is null order by created_at
 `
 
 func (q *Queries) ListWorkspaceModules(ctx context.Context, workspaceID uuid.UUID) ([]Module, error) {
@@ -222,6 +225,7 @@ func (q *Queries) ListWorkspaceModules(ctx context.Context, workspaceID uuid.UUI
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -280,7 +284,7 @@ func (q *Queries) SoftDeleteModule(ctx context.Context, arg SoftDeleteModulePara
 const updateModule = `-- name: UpdateModule :one
 update modules set name = $3, description = $4, status = $5, updated_by = $6, updated_at = now()
 where id = $1 and project_id = $2 and deleted_at is null
-returning id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at
+returning id, workspace_id, project_id, name, description, status, lead_id, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, archived_at
 `
 
 type UpdateModuleParams struct {
@@ -316,6 +320,7 @@ func (q *Queries) UpdateModule(ctx context.Context, arg UpdateModuleParams) (Mod
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }

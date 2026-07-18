@@ -12,6 +12,7 @@ import (
 
 	"planego/internal/analytic"
 	"planego/internal/apitoken"
+	"planego/internal/archive"
 	"planego/internal/asset"
 	"planego/internal/auth"
 	"planego/internal/config"
@@ -24,6 +25,7 @@ import (
 	"planego/internal/instance"
 	"planego/internal/intake"
 	"planego/internal/issue"
+	"planego/internal/issueextra"
 	"planego/internal/label"
 	"planego/internal/module"
 	"planego/internal/page"
@@ -31,8 +33,10 @@ import (
 	"planego/internal/search"
 	"planego/internal/state"
 	"planego/internal/user"
+	"planego/internal/userextra"
 	"planego/internal/userprops"
 	"planego/internal/view"
+	"planego/internal/viewextra"
 	"planego/internal/webhook"
 	"planego/internal/workspace"
 	"planego/internal/wsextra"
@@ -75,6 +79,10 @@ func main() {
 	ex := exporter.New(pool)
 	ext := external.New()
 	an := analytic.New(pool)
+	arc := archive.New(pool)
+	ve := viewextra.New(pool)
+	ixe := issueextra.New(pool)
+	ux := userextra.New(pool)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -83,7 +91,12 @@ func main() {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	r.Route("/auth", a.Routes)
+	r.Route("/auth", func(r chi.Router) {
+		a.Routes(r)
+		// change-password lives under /auth (like sign-in), but requires an
+		// authenticated session + CSRF, unlike the rest of the /auth group.
+		r.With(a.Require).Post("/change-password/", ux.ChangePassword)
+	})
 
 	r.Route("/api", func(r chi.Router) {
 		// public: the frontend reads instance config before login; asset
@@ -116,6 +129,10 @@ func main() {
 			ex.Routes(r)
 			ext.Routes(r)
 			an.Routes(r)
+			arc.Routes(r)
+			ve.Routes(r)
+			ixe.Routes(r)
+			ux.Routes(r)
 		})
 	})
 

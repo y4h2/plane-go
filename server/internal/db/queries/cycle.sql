@@ -4,10 +4,10 @@ values ($1, $2, $3, $4, $5, $6, $7, $8)
 returning *;
 
 -- name: GetCycle :one
-select * from cycles where id = $1 and project_id = $2 and deleted_at is null;
+select * from cycles where id = $1 and project_id = $2 and deleted_at is null and archived_at is null;
 
 -- name: ListCycles :many
-select * from cycles where project_id = $1 and deleted_at is null order by created_at;
+select * from cycles where project_id = $1 and deleted_at is null and archived_at is null order by created_at;
 
 -- name: ListWorkspaceCycles :many
 select * from cycles where workspace_id = $1 and deleted_at is null order by created_at;

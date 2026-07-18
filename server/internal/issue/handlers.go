@@ -11,12 +11,22 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"planego/internal/auth"
 	"planego/internal/db/gen"
 	"planego/internal/dbx"
 	"planego/internal/httpx"
 )
+
+// dateVal renders a nullable date column as "YYYY-MM-DD" or null (Django's
+// DateField wire format).
+func dateVal(d pgtype.Date) any {
+	if !d.Valid {
+		return nil
+	}
+	return d.Time.Format("2006-01-02")
+}
 
 // group_by fields the reference accepts; anything else (e.g. "state") is a 400.
 var allowedGroupBy = map[string]bool{
@@ -48,8 +58,8 @@ func Values(i gen.Issue) map[string]any {
 		"completed_at":     i.CompletedAt,
 		"estimate_point":   dbx.StrPtr(i.EstimatePoint),
 		"priority":         i.Priority,
-		"start_date":       nil,
-		"target_date":      nil,
+		"start_date":       dateVal(i.StartDate),
+		"target_date":      dateVal(i.TargetDate),
 		"sequence_id":      int(i.SequenceID),
 		"project_id":       i.ProjectID.String(),
 		"parent_id":        dbx.StrPtr(i.ParentID),

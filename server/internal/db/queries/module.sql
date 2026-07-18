@@ -4,10 +4,10 @@ values ($1, $2, $3, $4, $5, $6)
 returning *;
 
 -- name: GetModule :one
-select * from modules where id = $1 and project_id = $2 and deleted_at is null;
+select * from modules where id = $1 and project_id = $2 and deleted_at is null and archived_at is null;
 
 -- name: ListModules :many
-select * from modules where project_id = $1 and deleted_at is null order by created_at;
+select * from modules where project_id = $1 and deleted_at is null and archived_at is null order by created_at;
 
 -- name: ListWorkspaceModules :many
 select * from modules where workspace_id = $1 and deleted_at is null order by created_at;

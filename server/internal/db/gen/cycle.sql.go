@@ -59,7 +59,7 @@ func (q *Queries) CountOverlappingCycles(ctx context.Context, arg CountOverlappi
 const createCycle = `-- name: CreateCycle :one
 insert into cycles (workspace_id, project_id, name, description, start_date, end_date, owned_by_id, created_by)
 values ($1, $2, $3, $4, $5, $6, $7, $8)
-returning id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at
+returning id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at, archived_at
 `
 
 type CreateCycleParams struct {
@@ -99,12 +99,13 @@ func (q *Queries) CreateCycle(ctx context.Context, arg CreateCycleParams) (Cycle
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const getCycle = `-- name: GetCycle :one
-select id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at from cycles where id = $1 and project_id = $2 and deleted_at is null
+select id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at, archived_at from cycles where id = $1 and project_id = $2 and deleted_at is null and archived_at is null
 `
 
 type GetCycleParams struct {
@@ -129,6 +130,7 @@ func (q *Queries) GetCycle(ctx context.Context, arg GetCycleParams) (Cycle, erro
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -183,7 +185,7 @@ func (q *Queries) ListCycleIssueIssues(ctx context.Context, cycleID uuid.UUID) (
 }
 
 const listCycles = `-- name: ListCycles :many
-select id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at from cycles where project_id = $1 and deleted_at is null order by created_at
+select id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at, archived_at from cycles where project_id = $1 and deleted_at is null and archived_at is null order by created_at
 `
 
 func (q *Queries) ListCycles(ctx context.Context, projectID uuid.UUID) ([]Cycle, error) {
@@ -209,6 +211,7 @@ func (q *Queries) ListCycles(ctx context.Context, projectID uuid.UUID) ([]Cycle,
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -221,7 +224,7 @@ func (q *Queries) ListCycles(ctx context.Context, projectID uuid.UUID) ([]Cycle,
 }
 
 const listWorkspaceCycles = `-- name: ListWorkspaceCycles :many
-select id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at from cycles where workspace_id = $1 and deleted_at is null order by created_at
+select id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at, archived_at from cycles where workspace_id = $1 and deleted_at is null order by created_at
 `
 
 func (q *Queries) ListWorkspaceCycles(ctx context.Context, workspaceID uuid.UUID) ([]Cycle, error) {
@@ -247,6 +250,7 @@ func (q *Queries) ListWorkspaceCycles(ctx context.Context, workspaceID uuid.UUID
 			&i.DeletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -289,7 +293,7 @@ func (q *Queries) TransferCycleIssues(ctx context.Context, arg TransferCycleIssu
 const updateCycle = `-- name: UpdateCycle :one
 update cycles set name = $3, description = $4, start_date = $5, end_date = $6, updated_at = now()
 where id = $1 and project_id = $2 and deleted_at is null
-returning id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at
+returning id, workspace_id, project_id, name, description, start_date, end_date, owned_by_id, sort_order, created_by, deleted_at, created_at, updated_at, archived_at
 `
 
 type UpdateCycleParams struct {
@@ -325,6 +329,7 @@ func (q *Queries) UpdateCycle(ctx context.Context, arg UpdateCycleParams) (Cycle
 		&i.DeletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
