@@ -31,3 +31,9 @@ select exists(select 1 from projects where workspace_id = $1 and identifier = $2
 -- name: ListProjectIdentifiers :many
 select id, name, identifier from projects
 where workspace_id = $1 and upper(identifier) = upper($2) and deleted_at is null;
+
+-- name: ArchiveProject :exec
+update projects set archived_at = now(), updated_at = now() where id = $1 and workspace_id = $2;
+
+-- name: UnarchiveProject :exec
+update projects set archived_at = null, updated_at = now() where id = $1 and workspace_id = $2;

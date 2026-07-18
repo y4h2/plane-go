@@ -26,6 +26,71 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post(base, h.create)
 	r.Get(base, h.list)
 	r.Get(base+"{estimate_id}/", h.retrieve)
+	r.Patch(base+"{estimate_id}/", h.update)
+	r.Delete(base+"{estimate_id}/", h.destroy)
+}
+
+func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_, pid, ok := h.resolve(ctx, w, r)
+	if !ok {
+		return
+	}
+	eid, err := uuid.Parse(chi.URLParam(r, "estimate_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	cur, err := h.q.GetEstimate(ctx, gen.GetEstimateParams{ID: eid, ProjectID: pid})
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	var body struct {
+		Estimate struct {
+			Name string `json:"name"`
+			Type string `json:"type"`
+		} `json:"estimate"`
+		EstimatePoints []struct {
+			ID    string `json:"id"`
+			Value string `json:"value"`
+		} `json:"estimate_points"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	name, typ := cur.Name, cur.Type
+	if body.Estimate.Name != "" {
+		name = body.Estimate.Name
+	}
+	if body.Estimate.Type != "" {
+		typ = body.Estimate.Type
+	}
+	e, err := h.q.UpdateEstimate(ctx, gen.UpdateEstimateParams{ID: eid, Name: name, Type: typ, ProjectID: pid})
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
+		return
+	}
+	for _, p := range body.EstimatePoints {
+		if pointID, err := uuid.Parse(p.ID); err == nil {
+			_ = h.q.UpdateEstimatePointValue(ctx, gen.UpdateEstimatePointValueParams{ID: pointID, Value: p.Value})
+		}
+	}
+	pts, _ := h.q.ListEstimatePoints(ctx, e.ID)
+	httpx.JSON(w, http.StatusOK, estimateResp(e, pts))
+}
+
+func (h *Handler) destroy(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_, pid, ok := h.resolve(ctx, w, r)
+	if !ok {
+		return
+	}
+	eid, err := uuid.Parse(chi.URLParam(r, "estimate_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	_ = h.q.DeleteEstimate(ctx, gen.DeleteEstimateParams{ID: eid, ProjectID: pid})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func pointResp(p gen.EstimatePoint) map[string]any {

@@ -96,6 +96,20 @@ func (q *Queries) CreateEstimatePoint(ctx context.Context, arg CreateEstimatePoi
 	return i, err
 }
 
+const deleteEstimate = `-- name: DeleteEstimate :exec
+update estimates set deleted_at = now() where id = $1 and project_id = $2
+`
+
+type DeleteEstimateParams struct {
+	ID        uuid.UUID `json:"id"`
+	ProjectID uuid.UUID `json:"project_id"`
+}
+
+func (q *Queries) DeleteEstimate(ctx context.Context, arg DeleteEstimateParams) error {
+	_, err := q.db.Exec(ctx, deleteEstimate, arg.ID, arg.ProjectID)
+	return err
+}
+
 const getEstimate = `-- name: GetEstimate :one
 select id, workspace_id, project_id, name, type, description, last_used, created_by, updated_by, deleted_at, created_at, updated_at from estimates where id = $1 and project_id = $2 and deleted_at is null
 `
@@ -197,4 +211,54 @@ func (q *Queries) ListEstimates(ctx context.Context, projectID uuid.UUID) ([]Est
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateEstimate = `-- name: UpdateEstimate :one
+update estimates set name = $2, type = $3, updated_at = now() where id = $1 and project_id = $4 returning id, workspace_id, project_id, name, type, description, last_used, created_by, updated_by, deleted_at, created_at, updated_at
+`
+
+type UpdateEstimateParams struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Type      string    `json:"type"`
+	ProjectID uuid.UUID `json:"project_id"`
+}
+
+func (q *Queries) UpdateEstimate(ctx context.Context, arg UpdateEstimateParams) (Estimate, error) {
+	row := q.db.QueryRow(ctx, updateEstimate,
+		arg.ID,
+		arg.Name,
+		arg.Type,
+		arg.ProjectID,
+	)
+	var i Estimate
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Type,
+		&i.Description,
+		&i.LastUsed,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateEstimatePointValue = `-- name: UpdateEstimatePointValue :exec
+update estimate_points set value = $2, updated_at = now() where id = $1
+`
+
+type UpdateEstimatePointValueParams struct {
+	ID    uuid.UUID `json:"id"`
+	Value string    `json:"value"`
+}
+
+func (q *Queries) UpdateEstimatePointValue(ctx context.Context, arg UpdateEstimatePointValueParams) error {
+	_, err := q.db.Exec(ctx, updateEstimatePointValue, arg.ID, arg.Value)
+	return err
 }

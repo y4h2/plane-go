@@ -54,6 +54,17 @@ func (h *Handler) RoutesPublic(r chi.Router) {
 	r.Get("/assets/v2/static/{asset_id}/", h.serve)
 }
 
+// workspaceEntityTypes mirrors FileAsset.EntityTypeContext.values (workspace/
+// project-scoped uploads); userEntityTypes is the tighter set the user-asset
+// endpoint accepts. Unknown values are rejected 400, matching Python.
+var workspaceEntityTypes = map[string]bool{
+	"ISSUE_ATTACHMENT": true, "ISSUE_DESCRIPTION": true, "COMMENT_DESCRIPTION": true,
+	"PAGE_DESCRIPTION": true, "USER_COVER": true, "USER_AVATAR": true,
+	"WORKSPACE_LOGO": true, "PROJECT_COVER": true, "DRAFT_ISSUE_ATTACHMENT": true,
+	"DRAFT_ISSUE_DESCRIPTION": true,
+}
+var userEntityTypes = map[string]bool{"USER_AVATAR": true, "USER_COVER": true}
+
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u, _ := auth.UserFrom(ctx)
@@ -65,6 +76,15 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		EntityIdentifier string `json:"entity_identifier"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	// user-assets route has no slug; it accepts only avatar/cover.
+	allowed := workspaceEntityTypes
+	if chi.URLParam(r, "slug") == "" {
+		allowed = userEntityTypes
+	}
+	if !allowed[body.EntityType] {
+		httpx.JSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid entity type.", "status": false})
+		return
+	}
 	ct := body.Type
 	if ct == "" {
 		ct = "application/octet-stream"
@@ -150,8 +170,12 @@ func (h *Handler) markUploaded(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
 		return
 	}
+	if _, err := h.q.GetAsset(r.Context(), aid); err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
 	_ = h.q.MarkAssetUploaded(r.Context(), aid)
-	httpx.JSON(w, http.StatusOK, map[string]string{"message": "Updated successfully"})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // serve streams a stored asset (public: used directly as an <img src>).

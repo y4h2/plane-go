@@ -16,3 +16,12 @@ select * from estimates where id = $1 and project_id = $2 and deleted_at is null
 
 -- name: ListEstimatePoints :many
 select * from estimate_points where estimate_id = $1 and deleted_at is null order by key;
+
+-- name: UpdateEstimate :one
+update estimates set name = $2, type = $3, updated_at = now() where id = $1 and project_id = $4 returning *;
+
+-- name: DeleteEstimate :exec
+update estimates set deleted_at = now() where id = $1 and project_id = $2;
+
+-- name: UpdateEstimatePointValue :exec
+update estimate_points set value = $2, updated_at = now() where id = $1;

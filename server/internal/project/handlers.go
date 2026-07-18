@@ -35,6 +35,8 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/projects/", h.list)
 	r.Get("/workspaces/{slug}/projects/details/", h.details)
 	r.Get("/workspaces/{slug}/project-identifiers/", h.identifiers)
+	r.Post("/workspaces/{slug}/projects/{project_id}/archive/", h.archive)
+	r.Delete("/workspaces/{slug}/projects/{project_id}/archive/", h.unarchive)
 	r.Get("/workspaces/{slug}/projects/{project_id}/", h.retrieve)
 	r.Patch("/workspaces/{slug}/projects/{project_id}/", h.update)
 	r.Delete("/workspaces/{slug}/projects/{project_id}/", h.destroy)
@@ -400,6 +402,36 @@ func (h *Handler) destroy(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
 		return
 	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) archive(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, ok := h.workspace(ctx, w, chi.URLParam(r, "slug"))
+	if !ok {
+		return
+	}
+	pid, err := uuid.Parse(chi.URLParam(r, "project_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	_ = h.q.ArchiveProject(ctx, gen.ArchiveProjectParams{ID: pid, WorkspaceID: ws.ID})
+	httpx.JSON(w, http.StatusOK, map[string]any{"archived_at": time.Now().UTC()})
+}
+
+func (h *Handler) unarchive(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, ok := h.workspace(ctx, w, chi.URLParam(r, "slug"))
+	if !ok {
+		return
+	}
+	pid, err := uuid.Parse(chi.URLParam(r, "project_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	_ = h.q.UnarchiveProject(ctx, gen.UnarchiveProjectParams{ID: pid, WorkspaceID: ws.ID})
 	w.WriteHeader(http.StatusNoContent)
 }
 

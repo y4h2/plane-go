@@ -36,6 +36,7 @@ func (h *Handler) RoutesDetail(r chi.Router) {
 	r.Get(base+"/issue-relation/", h.relations)
 	r.Post(base+"/issue-relation/", h.addRelation)
 	r.Delete(base+"/issue-relation/", h.removeRelation)
+	r.Post(base+"/remove-relation/", h.removeRelation)
 	r.Post(base+"/sub-issues/", h.addSubIssues)
 	r.Get(base+"/issue-attachments/", h.listAttachments)
 	r.Get(base+"/history/", h.history)

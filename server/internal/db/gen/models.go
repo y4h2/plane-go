@@ -208,6 +208,7 @@ type Project struct {
 	CreatedAt       time.Time   `json:"created_at"`
 	UpdatedAt       time.Time   `json:"updated_at"`
 	CoverImageAsset pgtype.UUID `json:"cover_image_asset"`
+	ArchivedAt      *time.Time  `json:"archived_at"`
 }
 
 type ProjectMember struct {

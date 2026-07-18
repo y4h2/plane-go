@@ -13,10 +13,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveProject = `-- name: ArchiveProject :exec
+update projects set archived_at = now(), updated_at = now() where id = $1 and workspace_id = $2
+`
+
+type ArchiveProjectParams struct {
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) ArchiveProject(ctx context.Context, arg ArchiveProjectParams) error {
+	_, err := q.db.Exec(ctx, archiveProject, arg.ID, arg.WorkspaceID)
+	return err
+}
+
 const createProject = `-- name: CreateProject :one
 insert into projects (workspace_id, name, identifier, description, created_by)
 values ($1, $2, $3, $4, $5)
-returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset
+returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at
 `
 
 type CreateProjectParams struct {
@@ -50,12 +64,13 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverImageAsset,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-select id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset from projects where id = $1 and workspace_id = $2 and deleted_at is null
+select id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at from projects where id = $1 and workspace_id = $2 and deleted_at is null
 `
 
 type GetProjectByIDParams struct {
@@ -80,6 +95,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, arg GetProjectByIDParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverImageAsset,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -121,7 +137,7 @@ func (q *Queries) ListProjectIdentifiers(ctx context.Context, arg ListProjectIde
 }
 
 const listProjects = `-- name: ListProjects :many
-select p.id, p.workspace_id, p.name, p.identifier, p.description, p.network, p.sort_order, p.created_by, p.updated_by, p.deleted_at, p.created_at, p.updated_at, p.cover_image_asset, coalesce(pm.role, 0)::smallint as member_role
+select p.id, p.workspace_id, p.name, p.identifier, p.description, p.network, p.sort_order, p.created_by, p.updated_by, p.deleted_at, p.created_at, p.updated_at, p.cover_image_asset, p.archived_at, coalesce(pm.role, 0)::smallint as member_role
 from projects p
 left join project_members pm on pm.project_id = p.id and pm.member_id = $2
 where p.workspace_id = $1 and p.deleted_at is null
@@ -147,6 +163,7 @@ type ListProjectsRow struct {
 	CreatedAt       time.Time   `json:"created_at"`
 	UpdatedAt       time.Time   `json:"updated_at"`
 	CoverImageAsset pgtype.UUID `json:"cover_image_asset"`
+	ArchivedAt      *time.Time  `json:"archived_at"`
 	MemberRole      int16       `json:"member_role"`
 }
 
@@ -173,6 +190,7 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]L
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CoverImageAsset,
+			&i.ArchivedAt,
 			&i.MemberRole,
 		); err != nil {
 			return nil, err
@@ -215,6 +233,20 @@ func (q *Queries) SoftDeleteProject(ctx context.Context, arg SoftDeleteProjectPa
 	return err
 }
 
+const unarchiveProject = `-- name: UnarchiveProject :exec
+update projects set archived_at = null, updated_at = now() where id = $1 and workspace_id = $2
+`
+
+type UnarchiveProjectParams struct {
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) UnarchiveProject(ctx context.Context, arg UnarchiveProjectParams) error {
+	_, err := q.db.Exec(ctx, unarchiveProject, arg.ID, arg.WorkspaceID)
+	return err
+}
+
 const updateProject = `-- name: UpdateProject :one
 update projects set
     name        = $3,
@@ -222,7 +254,7 @@ update projects set
     updated_by  = $5,
     updated_at  = now()
 where id = $1 and workspace_id = $2 and deleted_at is null
-returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset
+returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at
 `
 
 type UpdateProjectParams struct {
@@ -256,6 +288,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverImageAsset,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
