@@ -11,6 +11,8 @@ type Config struct {
 	DatabaseURL       string
 	SessionCookieName string
 	WebURL            string
+	PublicURL         string // browser-facing origin of this API (through the proxy)
+	AssetDir          string // local directory where uploaded files are stored
 	SessionTTL        time.Duration
 }
 
@@ -20,6 +22,8 @@ func Load() Config {
 		DatabaseURL:       env("DATABASE_URL", "postgres://plane:plane@localhost:4010/plane_go?sslmode=disable"),
 		SessionCookieName: env("SESSION_COOKIE_NAME", "session-id"),
 		WebURL:            env("WEB_URL", "http://localhost:3000"),
+		PublicURL:         env("PLANE_GO_PUBLIC_URL", "http://localhost"),
+		AssetDir:          env("PLANE_GO_ASSET_DIR", "/tmp/plane-go-assets"),
 		SessionTTL:        7 * 24 * time.Hour,
 	}
 }

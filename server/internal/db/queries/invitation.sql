@@ -15,3 +15,6 @@ select * from workspace_member_invites where id = $1;
 
 -- name: AcceptInvite :exec
 update workspace_member_invites set accepted = true where id = $1;
+
+-- name: ListWorkspaceInvites :many
+select * from workspace_member_invites where workspace_id = $1 and accepted = false order by created_at;

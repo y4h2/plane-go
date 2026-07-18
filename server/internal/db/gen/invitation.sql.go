@@ -112,3 +112,34 @@ func (q *Queries) ListInvitesForEmail(ctx context.Context, email string) ([]List
 	}
 	return items, nil
 }
+
+const listWorkspaceInvites = `-- name: ListWorkspaceInvites :many
+select id, workspace_id, email, role, accepted, created_at from workspace_member_invites where workspace_id = $1 and accepted = false order by created_at
+`
+
+func (q *Queries) ListWorkspaceInvites(ctx context.Context, workspaceID uuid.UUID) ([]WorkspaceMemberInvite, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceInvites, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkspaceMemberInvite{}
+	for rows.Next() {
+		var i WorkspaceMemberInvite
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Email,
+			&i.Role,
+			&i.Accepted,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -6,6 +6,7 @@ package auth
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -26,9 +27,30 @@ func New(q *gen.Queries, cfg config.Config) *Auth { return &Auth{q: q, cfg: cfg}
 
 func (a *Auth) Routes(r chi.Router) {
 	r.Get("/get-csrf-token/", a.csrf)
+	r.Post("/email-check/", a.emailCheck)
 	r.Post("/sign-up/", a.signUp)
 	r.Post("/sign-in/", a.signIn)
 	r.Post("/sign-out/", a.signOut)
+}
+
+// emailCheck tells the frontend whether an email already has an account, so it
+// can show the login vs. sign-up form. Read-only, so no CSRF requirement.
+func (a *Auth) emailCheck(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
+	if email == "" {
+		var body struct {
+			Email string `json:"email"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		email = strings.ToLower(strings.TrimSpace(body.Email))
+	}
+	if email == "" {
+		httpx.JSON(w, http.StatusBadRequest, map[string]any{"error": "email is required"})
+		return
+	}
+	_, err := a.q.GetUserByEmail(r.Context(), email)
+	httpx.JSON(w, http.StatusOK, map[string]any{"existing": err == nil, "status": "CREDENTIAL"})
 }
 
 func (a *Auth) csrf(w http.ResponseWriter, r *http.Request) {

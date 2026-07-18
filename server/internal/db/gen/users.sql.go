@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 insert into users (email, password, display_name)
 values ($1, $2, $3)
-returning id, email, password, first_name, last_name, display_name, avatar, is_active, is_bot, date_joined, last_login, created_at, updated_at
+returning id, email, password, first_name, last_name, display_name, avatar, is_active, is_bot, date_joined, last_login, created_at, updated_at, profile
 `
 
 type CreateUserParams struct {
@@ -40,12 +40,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Profile,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-select id, email, password, first_name, last_name, display_name, avatar, is_active, is_bot, date_joined, last_login, created_at, updated_at from users where email = $1
+select id, email, password, first_name, last_name, display_name, avatar, is_active, is_bot, date_joined, last_login, created_at, updated_at, profile from users where email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -65,12 +66,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Profile,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-select id, email, password, first_name, last_name, display_name, avatar, is_active, is_bot, date_joined, last_login, created_at, updated_at from users where id = $1
+select id, email, password, first_name, last_name, display_name, avatar, is_active, is_bot, date_joined, last_login, created_at, updated_at, profile from users where id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -90,8 +92,27 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Profile,
 	)
 	return i, err
+}
+
+const mergeUserProfile = `-- name: MergeUserProfile :one
+update users set profile = profile || $2::jsonb, updated_at = now()
+where id = $1
+returning profile
+`
+
+type MergeUserProfileParams struct {
+	ID      uuid.UUID `json:"id"`
+	Column2 []byte    `json:"column_2"`
+}
+
+func (q *Queries) MergeUserProfile(ctx context.Context, arg MergeUserProfileParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, mergeUserProfile, arg.ID, arg.Column2)
+	var profile []byte
+	err := row.Scan(&profile)
+	return profile, err
 }
 
 const touchLastLogin = `-- name: TouchLastLogin :exec
@@ -101,4 +122,44 @@ update users set last_login = now(), updated_at = now() where id = $1
 func (q *Queries) TouchLastLogin(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, touchLastLogin, id)
 	return err
+}
+
+const updateUserNames = `-- name: UpdateUserNames :one
+update users set first_name = $2, last_name = $3, display_name = $4, updated_at = now()
+where id = $1
+returning id, email, password, first_name, last_name, display_name, avatar, is_active, is_bot, date_joined, last_login, created_at, updated_at, profile
+`
+
+type UpdateUserNamesParams struct {
+	ID          uuid.UUID `json:"id"`
+	FirstName   string    `json:"first_name"`
+	LastName    string    `json:"last_name"`
+	DisplayName string    `json:"display_name"`
+}
+
+func (q *Queries) UpdateUserNames(ctx context.Context, arg UpdateUserNamesParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserNames,
+		arg.ID,
+		arg.FirstName,
+		arg.LastName,
+		arg.DisplayName,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Password,
+		&i.FirstName,
+		&i.LastName,
+		&i.DisplayName,
+		&i.Avatar,
+		&i.IsActive,
+		&i.IsBot,
+		&i.DateJoined,
+		&i.LastLogin,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Profile,
+	)
+	return i, err
 }

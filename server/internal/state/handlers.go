@@ -30,6 +30,29 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/workspaces/{slug}/projects/{project_id}/states/{state_id}/mark-default/", h.markDefault)
 	r.Delete("/workspaces/{slug}/projects/{project_id}/states/{state_id}/", h.destroy)
 	r.Get("/workspaces/{slug}/states/", h.workspaceStates)
+	r.Get("/workspaces/{slug}/projects/{project_id}/intake-state/", h.intakeState)
+}
+
+// intakeState returns the project's triage/intake state. We don't model intake
+// separately, so this synthesizes a stable triage state per project.
+func (h *Handler) intakeState(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, pid, ok := h.resolve(ctx, w, r)
+	if !ok {
+		return
+	}
+	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte("triage:"+pid.String()))
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"id":           id.String(),
+		"project_id":   pid.String(),
+		"workspace_id": ws.ID.String(),
+		"name":         "Triage",
+		"color":        "#4E5355",
+		"group":        "triage",
+		"default":      false,
+		"description":  "",
+		"sequence":     httpx.Float(65535),
+	})
 }
 
 // stateResp is the 9-key single-object shape (no `order`).

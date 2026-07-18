@@ -46,7 +46,7 @@ func (q *Queries) DeleteSession(ctx context.Context, key string) error {
 }
 
 const getSessionUser = `-- name: GetSessionUser :one
-select u.id, u.email, u.password, u.first_name, u.last_name, u.display_name, u.avatar, u.is_active, u.is_bot, u.date_joined, u.last_login, u.created_at, u.updated_at
+select u.id, u.email, u.password, u.first_name, u.last_name, u.display_name, u.avatar, u.is_active, u.is_bot, u.date_joined, u.last_login, u.created_at, u.updated_at, u.profile
 from sessions s
 join users u on u.id = s.user_id
 where s.key = $1 and s.expires_at > now()
@@ -69,6 +69,7 @@ func (q *Queries) GetSessionUser(ctx context.Context, key string) (User, error) 
 		&i.LastLogin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Profile,
 	)
 	return i, err
 }

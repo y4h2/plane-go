@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"planego/internal/auth"
 	"planego/internal/db/gen"
@@ -156,7 +157,19 @@ func projectResp(p gen.Project, memberRole *int, members []string) projectRespon
 		MemberRole:           memberRole,
 		Members:              members,
 		NextWorkItemSequence: 1,
+		CoverImageAsset:      dbx.StrPtr(p.CoverImageAsset),
+		CoverImageURL:        coverURL(p.CoverImageAsset),
 	}
+}
+
+// coverURL renders a project's cover asset as a servable URL (nil when unset).
+func coverURL(a pgtype.UUID) *string {
+	s := dbx.StrPtr(a)
+	if s == nil {
+		return nil
+	}
+	url := "/api/assets/v2/static/" + *s + "/"
+	return &url
 }
 
 // listItem is the bare .values() subset the plain list endpoint returns.
@@ -199,9 +212,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	u, _ := auth.UserFrom(ctx)
 	var body struct {
-		Name        string `json:"name"`
-		Identifier  string `json:"identifier"`
-		Description string `json:"description"`
+		Name            string `json:"name"`
+		Identifier      string `json:"identifier"`
+		Description     string `json:"description"`
+		CoverImageAsset string `json:"cover_image_asset"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "The payload is not valid")
@@ -236,6 +250,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	// seed the five default workflow states (matches Plane's project bootstrap)
 	_ = state.SeedDefaults(ctx, h.q, ws.ID, p.ID)
+	// attach an uploaded cover image if one was provided
+	if cid, err := uuid.Parse(body.CoverImageAsset); err == nil {
+		_ = h.q.SetProjectCover(ctx, gen.SetProjectCoverParams{ID: p.ID, WorkspaceID: ws.ID, CoverImageAsset: dbx.PgUUID(cid)})
+		p.CoverImageAsset = dbx.PgUUID(cid)
+	}
 	role := roleAdmin
 	httpx.JSON(w, http.StatusCreated, projectResp(p, &role, h.memberIDs(ctx, p.ID)))
 }

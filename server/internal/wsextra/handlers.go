@@ -31,6 +31,77 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/quick-links/", h.emptyList)
 	r.Get("/workspaces/{slug}/home-preferences/", h.homePreferences)
 	r.Get("/workspaces/{slug}/stickies/", h.stickies)
+	// misc boot reads
+	r.Get("/workspaces/{slug}/sidebar-preferences/", h.sidebarPreferences)
+	r.Get("/workspaces/{slug}/user-properties/", h.workspaceUserProps)
+	r.Get("/workspaces/{slug}/estimates/", h.emptyList)
+	r.Get("/workspaces/{slug}/users/notifications", h.notificationsPaginated)
+	r.Get("/timezones/", h.timezones)
+}
+
+func (h *Handler) sidebarPreferences(w http.ResponseWriter, _ *http.Request) {
+	pref := func(pinned bool, order float64) map[string]any {
+		return map[string]any{"is_pinned": pinned, "sort_order": httpx.Float(order)}
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"your_work":     pref(false, 55535),
+		"views":         pref(false, 65535),
+		"active_cycles": pref(false, 75535),
+		"analytics":     pref(false, 85535),
+		"drafts":        pref(true, 95535),
+		"projects":      pref(true, 45535),
+	})
+}
+
+func (h *Handler) workspaceUserProps(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, err := h.q.GetWorkspaceBySlug(ctx, chi.URLParam(r, "slug"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	u, _ := auth.UserFrom(ctx)
+	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte("wsprops:"+ws.ID.String()+":"+u.ID.String()))
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"id":                 id.String(),
+		"workspace":          ws.ID.String(),
+		"user":               u.ID.String(),
+		"deleted_at":         nil,
+		"filters":            map[string]any{},
+		"display_filters":    map[string]any{},
+		"display_properties": map[string]any{},
+	})
+}
+
+func (h *Handler) notificationsPaginated(w http.ResponseWriter, _ *http.Request) {
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"grouped_by": nil, "sub_grouped_by": nil, "total_count": 0,
+		"next_cursor": "300:1:0", "prev_cursor": "300:-1:1",
+		"next_page_results": false, "prev_page_results": false,
+		"count": 0, "total_pages": 0, "total_results": 0,
+		"extra_stats": nil, "results": []any{},
+	})
+}
+
+func (h *Handler) timezones(w http.ResponseWriter, _ *http.Request) {
+	tz := func(utc, val, label string) map[string]any {
+		return map[string]any{"utc_offset": "UTC" + utc, "gmt_offset": "GMT" + utc, "value": val, "label": label}
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"timezones": []map[string]any{
+		tz("-08:00", "America/Los_Angeles", "Pacific Time"),
+		tz("-07:00", "America/Denver", "Mountain Time"),
+		tz("-06:00", "America/Chicago", "Central Time"),
+		tz("-05:00", "America/New_York", "Eastern Time"),
+		tz("-05:00", "America/Toronto", "Toronto"),
+		tz("+00:00", "Etc/UTC", "UTC"),
+		tz("+00:00", "Europe/London", "London"),
+		tz("+01:00", "Europe/Berlin", "Berlin"),
+		tz("+05:30", "Asia/Kolkata", "India"),
+		tz("+08:00", "Asia/Shanghai", "Shanghai"),
+		tz("+08:00", "Asia/Singapore", "Singapore"),
+		tz("+09:00", "Asia/Tokyo", "Tokyo"),
+		tz("+10:00", "Australia/Sydney", "Sydney"),
+	}})
 }
 
 func (h *Handler) emptyList(w http.ResponseWriter, _ *http.Request) {

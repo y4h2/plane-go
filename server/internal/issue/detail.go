@@ -32,6 +32,68 @@ func (h *Handler) RoutesDetail(r chi.Router) {
 	r.Get(base+"/issue-subscribers/", h.listSubscribers)
 	r.Get(base+"/reactions/", h.listReactions)
 	r.Post(base+"/reactions/", h.addReaction)
+	r.Get(base+"/meta/", h.meta)
+	r.Get(base+"/issue-relation/", h.relations)
+	r.Post(base+"/issue-relation/", h.addRelation)
+	r.Delete(base+"/issue-relation/", h.removeRelation)
+	r.Post(base+"/sub-issues/", h.addSubIssues)
+	r.Get(base+"/issue-attachments/", h.listAttachments)
+	r.Get(base+"/history/", h.history)
+	r.Get("/workspaces/{slug}/projects/{project_id}/work-items/{issue_id}/description-versions/", h.descriptionVersions)
+}
+
+func (h *Handler) meta(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, pid, ok := h.scope(ctx, w, r)
+	if !ok {
+		return
+	}
+	iid, ok := parseIssueID(w, r)
+	if !ok {
+		return
+	}
+	i, err := h.q.GetIssue(ctx, gen.GetIssueParams{ID: iid, ProjectID: pid})
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	ident := ""
+	if p, err := h.q.GetProjectByID(ctx, gen.GetProjectByIDParams{ID: pid, WorkspaceID: ws.ID}); err == nil {
+		ident = p.Identifier
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"sequence_id": int(i.SequenceID), "project_identifier": ident})
+}
+
+func (h *Handler) relations(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if _, _, ok := h.scope(ctx, w, r); !ok {
+		return
+	}
+	groups := map[string][]map[string]any{
+		"blocking": {}, "blocked_by": {}, "duplicate": {}, "relates_to": {},
+		"start_after": {}, "start_before": {}, "finish_after": {}, "finish_before": {},
+	}
+	if iid, ok := parseIssueID(w, r); ok {
+		rows, _ := h.q.ListRelations(ctx, iid)
+		for _, rel := range rows {
+			ridStr := dbx.StrPtr(dbx.PgUUID(rel.RelatedIssueID))
+			item := map[string]any{"id": *ridStr, "relation_type": rel.RelationType}
+			groups[rel.RelationType] = append(groups[rel.RelationType], item)
+		}
+	}
+	httpx.JSON(w, http.StatusOK, groups)
+}
+
+func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
+	httpx.JSON(w, http.StatusOK, []any{})
+}
+
+func (h *Handler) descriptionVersions(w http.ResponseWriter, r *http.Request) {
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"prev_cursor": "1000:-1:0", "cursor": "1000:0:0", "next_cursor": nil,
+		"prev_page_results": false, "next_page_results": false,
+		"count": 0, "total_pages": 0, "total_results": 0, "results": []any{},
+	})
 }
 
 func (h *Handler) getSubscribe(w http.ResponseWriter, r *http.Request) {
@@ -342,8 +404,12 @@ func (h *Handler) subIssues(w http.ResponseWriter, r *http.Request) {
 	if _, _, ok := h.scope(ctx, w, r); !ok {
 		return
 	}
+	iid, ok := parseIssueID(w, r)
+	if !ok {
+		return
+	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
-		"sub_issues":         []any{},
+		"sub_issues":         h.subIssueValues(ctx, iid),
 		"state_distribution": map[string]any{},
 	})
 }

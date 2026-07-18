@@ -34,6 +34,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/users/me/workspaces/", h.listMine)
 	r.Get("/workspace-slug-check/", h.slugCheck)
 	// invitations
+	r.Get("/workspaces/{slug}/invitations/", h.listWorkspaceInvites)
 	r.Post("/workspaces/{slug}/invitations/", h.createInvites)
 	r.Get("/users/me/workspaces/invitations/", h.listMyInvites)
 	r.Post("/users/me/workspaces/invitations/", h.acceptInvites)
@@ -349,6 +350,28 @@ func (h *Handler) createInvites(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	httpx.JSON(w, http.StatusCreated, out)
+}
+
+func (h *Handler) listWorkspaceInvites(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, err := h.q.GetWorkspaceBySlug(ctx, chi.URLParam(r, "slug"))
+	if err != nil {
+		h.notFoundOr500(w, err)
+		return
+	}
+	rows, err := h.q.ListWorkspaceInvites(ctx, ws.ID)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, inv := range rows {
+		out = append(out, map[string]any{
+			"id": inv.ID.String(), "email": inv.Email, "role": int(inv.Role),
+			"accepted": inv.Accepted, "workspace": ws.ID.String(), "created_at": inv.CreatedAt,
+		})
+	}
+	httpx.JSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) listMyInvites(w http.ResponseWriter, r *http.Request) {

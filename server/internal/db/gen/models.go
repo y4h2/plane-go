@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Asset struct {
+	ID               uuid.UUID   `json:"id"`
+	WorkspaceID      pgtype.UUID `json:"workspace_id"`
+	ProjectID        pgtype.UUID `json:"project_id"`
+	UserID           pgtype.UUID `json:"user_id"`
+	Name             string      `json:"name"`
+	ContentType      string      `json:"content_type"`
+	Size             int64       `json:"size"`
+	EntityType       string      `json:"entity_type"`
+	EntityIdentifier string      `json:"entity_identifier"`
+	IsUploaded       bool        `json:"is_uploaded"`
+	CreatedAt        time.Time   `json:"created_at"`
+}
+
 type Cycle struct {
 	ID          uuid.UUID   `json:"id"`
 	WorkspaceID uuid.UUID   `json:"workspace_id"`
@@ -124,6 +138,16 @@ type IssueReaction struct {
 	CreatedAt   time.Time   `json:"created_at"`
 }
 
+type IssueRelation struct {
+	ID             uuid.UUID `json:"id"`
+	WorkspaceID    uuid.UUID `json:"workspace_id"`
+	ProjectID      uuid.UUID `json:"project_id"`
+	IssueID        uuid.UUID `json:"issue_id"`
+	RelatedIssueID uuid.UUID `json:"related_issue_id"`
+	RelationType   string    `json:"relation_type"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type IssueSubscriber struct {
 	ID           uuid.UUID `json:"id"`
 	WorkspaceID  uuid.UUID `json:"workspace_id"`
@@ -171,18 +195,19 @@ type ModuleIssue struct {
 }
 
 type Project struct {
-	ID          uuid.UUID   `json:"id"`
-	WorkspaceID uuid.UUID   `json:"workspace_id"`
-	Name        string      `json:"name"`
-	Identifier  string      `json:"identifier"`
-	Description string      `json:"description"`
-	Network     int16       `json:"network"`
-	SortOrder   float64     `json:"sort_order"`
-	CreatedBy   pgtype.UUID `json:"created_by"`
-	UpdatedBy   pgtype.UUID `json:"updated_by"`
-	DeletedAt   *time.Time  `json:"deleted_at"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ID              uuid.UUID   `json:"id"`
+	WorkspaceID     uuid.UUID   `json:"workspace_id"`
+	Name            string      `json:"name"`
+	Identifier      string      `json:"identifier"`
+	Description     string      `json:"description"`
+	Network         int16       `json:"network"`
+	SortOrder       float64     `json:"sort_order"`
+	CreatedBy       pgtype.UUID `json:"created_by"`
+	UpdatedBy       pgtype.UUID `json:"updated_by"`
+	DeletedAt       *time.Time  `json:"deleted_at"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	CoverImageAsset pgtype.UUID `json:"cover_image_asset"`
 }
 
 type ProjectMember struct {
@@ -242,6 +267,7 @@ type User struct {
 	LastLogin   *time.Time `json:"last_login"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+	Profile     []byte     `json:"profile"`
 }
 
 type UserFavorite struct {
