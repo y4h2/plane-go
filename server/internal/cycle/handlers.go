@@ -373,6 +373,14 @@ func (h *Handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
 		return
 	}
+	f := issue.ParseFilter(r.URL.Query())
+	var sg map[string]string
+	if f.NeedsStateGroups() {
+		if states, err := h.q.ListStates(ctx, pid); err == nil {
+			sg = issue.StateGroupMap(states)
+		}
+	}
+	issues = f.Apply(issues, sg)
 	httpx.JSON(w, http.StatusOK, issue.ListEnvelope(issues, groupBy))
 }
 

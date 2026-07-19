@@ -323,9 +323,24 @@ func (h *Handler) globalViewIssues(w http.ResponseWriter, r *http.Request) {
 		where p.workspace_id = $1 and i.deleted_at is null`
 	args := []any{wsID, u.ID}
 
-	if priorities := splitCSV(r.URL.Query().Get("priority")); len(priorities) > 0 {
+	// Shared parser handles both the flat params and the JSON `filters` blob
+	// (Django-style keys) the frontend uses across surfaces.
+	f := issue.ParseFilter(r.URL.Query())
+	if priorities := f.Priority(); len(priorities) > 0 {
 		args = append(args, priorities)
 		q += " and i.priority = any($" + strconv.Itoa(len(args)) + ")"
+	}
+	if states := parseUUIDs(f.State()); len(states) > 0 {
+		args = append(args, states)
+		q += " and i.state_id = any($" + strconv.Itoa(len(args)) + ")"
+	}
+	if groups := f.StateGroup(); len(groups) > 0 {
+		args = append(args, groups)
+		q += " and s.group_name = any($" + strconv.Itoa(len(args)) + ")"
+	}
+	if creators := parseUUIDs(f.CreatedBy()); len(creators) > 0 {
+		args = append(args, creators)
+		q += " and i.created_by = any($" + strconv.Itoa(len(args)) + ")"
 	}
 	if projectIDs := parseUUIDs(splitCSV(r.URL.Query().Get("project"))); len(projectIDs) > 0 {
 		args = append(args, projectIDs)

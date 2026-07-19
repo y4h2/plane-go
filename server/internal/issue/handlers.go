@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +19,156 @@ import (
 	"planego/internal/dbx"
 	"planego/internal/httpx"
 )
+
+// Filter captures the issue-list filter query params Go can evaluate against its
+// schema: priority, state (state_id), state_group, created_by, parent,
+// estimate_point — each a comma-separated set (matching Django's *__in filters).
+// Label/assignee/mention/date filters are NOT applied — the Go schema has no
+// such associations/date-range parsing — so they impose no constraint.
+type Filter struct {
+	priority   map[string]bool
+	state      map[string]bool
+	stateGroup map[string]bool
+	createdBy  map[string]bool
+	parent     map[string]bool
+	estimate   map[string]bool
+	active     bool
+}
+
+func csvSet(v string) map[string]bool {
+	m := map[string]bool{}
+	for _, s := range strings.Split(v, ",") {
+		if s = strings.TrimSpace(s); s != "" && s != "null" {
+			m[s] = true
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+// mergeFilterVal appends a JSON filter value (a comma-string or a []string) to
+// any flat query value for the same dimension.
+func mergeFilterVal(flat string, v any) string {
+	var add string
+	switch t := v.(type) {
+	case string:
+		add = t
+	case []any:
+		parts := make([]string, 0, len(t))
+		for _, e := range t {
+			if s, ok := e.(string); ok {
+				parts = append(parts, s)
+			}
+		}
+		add = strings.Join(parts, ",")
+	}
+	switch {
+	case add == "":
+		return flat
+	case flat == "":
+		return add
+	default:
+		return flat + "," + add
+	}
+}
+
+// ParseFilter reads the supported filter dimensions from a list request. The
+// frontend sends them two ways depending on the surface: flat query params
+// (priority=urgent,high — cycle/module boards) and a JSON `filters` blob with
+// Django-style keys (filters={"priority__in":"urgent,high"} — the project
+// board). Both are honored and merged.
+func ParseFilter(q url.Values) Filter {
+	pr, st, sg := q.Get("priority"), q.Get("state"), q.Get("state_group")
+	cb, pa, es := q.Get("created_by"), q.Get("parent"), q.Get("estimate_point")
+	if raw := q.Get("filters"); raw != "" {
+		var m map[string]any
+		if json.Unmarshal([]byte(raw), &m) == nil {
+			pr = mergeFilterVal(pr, m["priority__in"])
+			st = mergeFilterVal(st, m["state__in"])
+			sg = mergeFilterVal(sg, m["state__group__in"])
+			cb = mergeFilterVal(cb, m["created_by__in"])
+			pa = mergeFilterVal(pa, m["parent__in"])
+			es = mergeFilterVal(es, m["estimate_point__in"])
+		}
+	}
+	f := Filter{
+		priority:   csvSet(pr),
+		state:      csvSet(st),
+		stateGroup: csvSet(sg),
+		createdBy:  csvSet(cb),
+		parent:     csvSet(pa),
+		estimate:   csvSet(es),
+	}
+	f.active = f.priority != nil || f.state != nil || f.stateGroup != nil ||
+		f.createdBy != nil || f.parent != nil || f.estimate != nil
+	return f
+}
+
+// NeedsStateGroups reports whether Apply requires a state_id->group map.
+func (f Filter) NeedsStateGroups() bool { return f.stateGroup != nil }
+
+func setKeys(m map[string]bool) []string {
+	if m == nil {
+		return nil
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// Dimension accessors for SQL callers (e.g. the workspace global list, which
+// filters in the query rather than in Go).
+func (f Filter) Priority() []string   { return setKeys(f.priority) }
+func (f Filter) State() []string      { return setKeys(f.state) }
+func (f Filter) StateGroup() []string { return setKeys(f.stateGroup) }
+func (f Filter) CreatedBy() []string  { return setKeys(f.createdBy) }
+func (f Filter) Parent() []string     { return setKeys(f.parent) }
+
+// Apply returns the issues that pass every active filter. stateGroup maps a
+// state_id to its group_name (only consulted when a state_group filter is set;
+// may be nil otherwise).
+func (f Filter) Apply(issues []gen.Issue, stateGroup map[string]string) []gen.Issue {
+	if !f.active {
+		return issues
+	}
+	out := make([]gen.Issue, 0, len(issues))
+	for _, i := range issues {
+		if f.priority != nil && !f.priority[i.Priority] {
+			continue
+		}
+		sid := dbx.StrOrEmpty(i.StateID)
+		if f.state != nil && !f.state[sid] {
+			continue
+		}
+		if f.stateGroup != nil && !f.stateGroup[stateGroup[sid]] {
+			continue
+		}
+		if f.createdBy != nil && !f.createdBy[dbx.StrOrEmpty(i.CreatedBy)] {
+			continue
+		}
+		if f.parent != nil && !f.parent[dbx.StrOrEmpty(i.ParentID)] {
+			continue
+		}
+		if f.estimate != nil && !f.estimate[dbx.StrOrEmpty(i.EstimatePoint)] {
+			continue
+		}
+		out = append(out, i)
+	}
+	return out
+}
+
+// StateGroupMap builds a state_id -> group_name lookup from a project's states.
+func StateGroupMap(states []gen.State) map[string]string {
+	m := make(map[string]string, len(states))
+	for _, s := range states {
+		m[s.ID.String()] = s.GroupName
+	}
+	return m
+}
 
 // dateVal renders a nullable date column as "YYYY-MM-DD" or null (Django's
 // DateField wire format).
@@ -170,7 +321,21 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
 		return
 	}
+	issues = h.filter(ctx, pid, r, issues)
 	httpx.JSON(w, http.StatusOK, ListEnvelope(issues, groupBy))
+}
+
+// filter narrows an issue slice by the request's list-filter query params,
+// fetching the project's states only when a state_group filter needs them.
+func (h *Handler) filter(ctx context.Context, pid uuid.UUID, r *http.Request, issues []gen.Issue) []gen.Issue {
+	f := ParseFilter(r.URL.Query())
+	var sg map[string]string
+	if f.NeedsStateGroups() {
+		if states, err := h.q.ListStates(ctx, pid); err == nil {
+			sg = StateGroupMap(states)
+		}
+	}
+	return f.Apply(issues, sg)
 }
 
 // ValidGroupBy reports whether field is an accepted group_by (else the caller

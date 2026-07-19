@@ -11,7 +11,7 @@ _Last updated: 2026-07-18_
 |---|---|
 | Go route patterns implemented | ~165 distinct paths |
 | Django app-API endpoints (total) | 233 |
-| Contract tests (black-box, Go↔Python parity) | **357, all green on BOTH Go and Python** |
+| Contract tests (black-box, Go↔Python parity) | **367, all green on BOTH Go and Python** |
 | Migrations | 0001–0026 |
 | Full app runs against Go in a browser | ✅ (signup → onboarding → projects → issues → cycles) |
 
@@ -65,6 +65,8 @@ sign-up/in/out, get-csrf-token, email-check.
 - **Remaining-module wave (7 parallel agents, each with e2e tests frozen on Python)** — **api-tokens** (CRUD, mig 0021), **webhooks** (CRUD + regenerate + logs, mig 0020), **intake/triage** (CRUD + status transitions, lazy default-intake, mig 0019), **pages** (metadata CRUD/archive/lock/favorite/duplicate, mig 0022; live-sync endpoints skipped), **analytics** (analytics + default-analytics), **exporter** (job create/list, mig 0023) + **external** (unsplash/AI unconfigured-key parity). → **275 tests, green on both servers.**
 - **Secondary-actions wave (4 parallel agents)** — **cycle+module archive/unarchive** + archived lists (mig 0024; added `archived_at` to cycles/modules, filtered their normal lists), **view favorites + workspace-level issue list** (mig 0025, reuses user_favorites), **draft-issues CRUD + bulk issue-dates** (mig 0026), **user change-password (/auth, +CSRF) + deactivate**. Fixed the shared issue `.values()` to surface real `start_date`/`target_date` (was hardcoded null). → **336 tests, green on both servers.**
 - **Tail wave (2 agents)** — **deleted-issues** list + **work-item-by-identifier** lookup (`/work-items/{IDENT}-{seq}/`); **module analytics** — modules expose progress counts + distribution embedded in the retrieve/list response (no separate endpoint in Django), wired into `internal/module`'s `.values()`. Integration fixes: issue create now accepts `state_id` (not just `state`); dropped the inert creator auto-subscribe so the identifier endpoint's `is_subscribed` matches Python (false until explicit subscribe). → **357 tests, green on both servers.**
+
+- **Browser-driven fixes (demo walk)** — driving the reused frontend against Go surfaced two whole classes of bug the black-box tests missed: (1) **grouped issue lists** returned bare lists instead of per-group `{results, total_results}` sub-envelopes → Kanban/grouped boards rendered empty (fixed for project + cycle + module lists); (2) **query filters were ignored entirely** → saved views and board filters returned everything. Filtering now honored on project/cycle/module boards + the workspace global list, for both wire forms (flat `?priority=urgent,high` and the JSON blob `filters={"priority__in":...}`), across priority/state/state_group/created_by/parent/estimate_point. Label/assignee/mention/date filters remain unsupported (no such associations in the Go schema). Also: issue create now accepts `state_id`. → **367 tests.**
 
 ## Remaining work — suggested order
 
