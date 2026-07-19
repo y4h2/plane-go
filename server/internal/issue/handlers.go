@@ -316,7 +316,17 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpx.Detail(w, http.StatusBadRequest, "Invalid group_by field: "+groupBy)
 		return
 	}
-	issues, err := h.q.ListIssues(ctx, pid)
+	// The module/cycle boards hit this project-issues endpoint with ?module= or
+	// ?cycle= rather than the nested list, so scope the base set accordingly.
+	var issues []gen.Issue
+	var err error
+	if mid, e := uuid.Parse(r.URL.Query().Get("module")); e == nil {
+		issues, err = h.q.ListModuleIssueIssues(ctx, mid)
+	} else if cid, e := uuid.Parse(r.URL.Query().Get("cycle")); e == nil {
+		issues, err = h.q.ListCycleIssueIssues(ctx, cid)
+	} else {
+		issues, err = h.q.ListIssues(ctx, pid)
+	}
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
 		return

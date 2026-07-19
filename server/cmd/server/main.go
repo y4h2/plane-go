@@ -16,6 +16,7 @@ import (
 	"planego/internal/asset"
 	"planego/internal/auth"
 	"planego/internal/config"
+	"planego/internal/entityprops"
 	"planego/internal/estimate"
 	"planego/internal/cycle"
 	"planego/internal/db/gen"
@@ -85,6 +86,7 @@ func main() {
 	ixe := issueextra.New(pool)
 	ux := userextra.New(pool)
 	it := issuetail.New(pool)
+	ep := entityprops.New(pool)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -136,6 +138,7 @@ func main() {
 			ixe.Routes(r)
 			ux.Routes(r)
 			it.Routes(r)
+			ep.Routes(r)
 		})
 	})
 
