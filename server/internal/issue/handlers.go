@@ -178,9 +178,16 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, Envelope(vals, len(issues), nil))
 		return
 	}
-	groups := map[string][]map[string]any{}
+	lists := map[string][]map[string]any{}
 	for _, i := range issues {
-		groups[groupKey(i, groupBy)] = append(groups[groupKey(i, groupBy)], Values(i))
+		k := groupKey(i, groupBy)
+		lists[k] = append(lists[k], Values(i))
+	}
+	// Each group value is a sub-envelope {results, total_results}, not a bare
+	// list — the frontend's grouped/kanban renderer reads group.results.
+	groups := make(map[string]any, len(lists))
+	for k, v := range lists {
+		groups[k] = map[string]any{"results": v, "total_results": len(v)}
 	}
 	httpx.JSON(w, http.StatusOK, Envelope(groups, len(issues), &groupBy))
 }

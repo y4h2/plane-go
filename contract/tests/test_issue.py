@@ -122,7 +122,16 @@ def test_list_grouped_by_priority_returns_dict_results(client, workspace, projec
     body = r.json()
     assert_envelope(body, where="issue.list.grouped", grouped=True)
     assert body["grouped_by"] == "priority"
-    assert isinstance(body["results"], dict)
+    results = body["results"]
+    assert isinstance(results, dict)
+    # each group value is a sub-envelope {results: [...], total_results: int},
+    # NOT a bare list -- the frontend's grouped/kanban renderer reads
+    # group["results"], so a plain list makes the board render empty.
+    assert results, "expected at least one group"
+    for key, group in results.items():
+        assert isinstance(group, dict), f"group {key!r} must be a sub-envelope dict, got {type(group).__name__}"
+        assert isinstance(group.get("results"), list), f"group {key!r} missing results list"
+        assert isinstance(group.get("total_results"), int), f"group {key!r} missing total_results int"
 
 
 def test_list_grouped_by_invalid_field_returns_400(client, workspace, project):
