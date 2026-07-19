@@ -39,6 +39,140 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/default-analytics/", h.defaultAnalytics)
 	// NOTE: /project-stats/ is registered by the search package (identical
 	// path + shape); registering it here too would panic chi on a dup route.
+	// Advanced analytics (the workspace Analytics page). The frontend calls
+	// these without a trailing slash; register both forms.
+	for _, s := range []string{"", "/"} {
+		r.Get("/workspaces/{slug}/advance-analytics"+s, h.advanceOverview)
+		r.Get("/workspaces/{slug}/advance-analytics-stats"+s, h.advanceStats)
+		r.Get("/workspaces/{slug}/advance-analytics-charts"+s, h.advanceCharts)
+	}
+}
+
+// wsID resolves the workspace uuid for the {slug}. Returns false (and writes a
+// 404) when the slug is unknown.
+func (h *Handler) wsID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	var id uuid.UUID
+	err := h.pool.QueryRow(r.Context(),
+		`select id from workspaces where slug=$1 and deleted_at is null`,
+		chi.URLParam(r, "slug")).Scan(&id)
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return id, false
+	}
+	return id, true
+}
+
+func (h *Handler) count(ctx context.Context, sql string, args ...any) int {
+	var n int
+	_ = h.pool.QueryRow(ctx, sql, args...).Scan(&n)
+	return n
+}
+
+// advanceOverview backs the Analytics > Overview stat tiles.
+func (h *Handler) advanceOverview(w http.ResponseWriter, r *http.Request) {
+	ws, ok := h.wsID(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	c := func(sql string, args ...any) map[string]any { return map[string]any{"count": h.count(ctx, sql, args...)} }
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"total_users":      c(`select count(*) from workspace_members where workspace_id=$1`, ws),
+		"total_admins":     c(`select count(*) from workspace_members where workspace_id=$1 and role=20`, ws),
+		"total_members":    c(`select count(*) from workspace_members where workspace_id=$1 and role=15`, ws),
+		"total_guests":     c(`select count(*) from workspace_members where workspace_id=$1 and role=5`, ws),
+		"total_projects":   c(`select count(*) from projects where workspace_id=$1 and deleted_at is null`, ws),
+		"total_work_items": c(`select count(*) from issues i join projects p on p.id=i.project_id where p.workspace_id=$1 and i.deleted_at is null`, ws),
+		"total_cycles":     c(`select count(*) from cycles c join projects p on p.id=c.project_id where p.workspace_id=$1 and c.deleted_at is null`, ws),
+		"total_intake":     c(`select count(*) from intakes ik join projects p on p.id=ik.project_id where p.workspace_id=$1`, ws),
+	})
+}
+
+// advanceStats backs Analytics > Work items (per-project state-group counts).
+func (h *Handler) advanceStats(w http.ResponseWriter, r *http.Request) {
+	ws, ok := h.wsID(w, r)
+	if !ok {
+		return
+	}
+	rows, err := h.pool.Query(r.Context(), `
+		select p.id, p.name,
+		  count(*) filter (where s.group_name='cancelled')  as cancelled,
+		  count(*) filter (where s.group_name='completed')  as completed,
+		  count(*) filter (where s.group_name='backlog')    as backlog,
+		  count(*) filter (where s.group_name='unstarted')  as unstarted,
+		  count(*) filter (where s.group_name='started')    as started
+		from projects p
+		left join issues i on i.project_id=p.id and i.deleted_at is null
+		left join states s on s.id=i.state_id
+		where p.workspace_id=$1 and p.deleted_at is null
+		group by p.id, p.name`, ws)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
+		return
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var id uuid.UUID
+		var name string
+		var canc, comp, back, unst, star int
+		if rows.Scan(&id, &name, &canc, &comp, &back, &unst, &star) == nil {
+			out = append(out, map[string]any{
+				"project_id": id.String(), "project__name": name,
+				"cancelled_work_items": canc, "completed_work_items": comp,
+				"backlog_work_items": back, "un_started_work_items": unst, "started_work_items": star,
+			})
+		}
+	}
+	httpx.JSON(w, http.StatusOK, out)
+}
+
+// advanceCharts backs the Analytics charts. type=projects returns per-entity
+// workspace counts; any other type returns a (possibly single-bucket) time
+// series over issue creation dates.
+func (h *Handler) advanceCharts(w http.ResponseWriter, r *http.Request) {
+	ws, ok := h.wsID(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	if r.URL.Query().Get("type") == "projects" {
+		httpx.JSON(w, http.StatusOK, []map[string]any{
+			{"key": "work_items", "name": "Work Items", "count": h.count(ctx, `select count(*) from issues i join projects p on p.id=i.project_id where p.workspace_id=$1 and i.deleted_at is null`, ws)},
+			{"key": "cycles", "name": "Cycles", "count": h.count(ctx, `select count(*) from cycles c join projects p on p.id=c.project_id where p.workspace_id=$1 and c.deleted_at is null`, ws)},
+			{"key": "modules", "name": "Modules", "count": h.count(ctx, `select count(*) from modules m join projects p on p.id=m.project_id where p.workspace_id=$1 and m.deleted_at is null`, ws)},
+			{"key": "intake", "name": "Intake", "count": h.count(ctx, `select count(*) from intakes ik join projects p on p.id=ik.project_id where p.workspace_id=$1`, ws)},
+			{"key": "members", "name": "Members", "count": h.count(ctx, `select count(*) from workspace_members where workspace_id=$1`, ws)},
+			{"key": "pages", "name": "Pages", "count": h.count(ctx, `select count(*) from pages where workspace_id=$1 and deleted_at is null`, ws)},
+		})
+		return
+	}
+	rows, err := h.pool.Query(ctx, `
+		select to_char(i.created_at::date,'YYYY-MM-DD') as d,
+		       count(*) as created,
+		       count(*) filter (where s.group_name='completed') as completed
+		from issues i
+		join projects p on p.id=i.project_id
+		left join states s on s.id=i.state_id
+		where p.workspace_id=$1 and i.deleted_at is null
+		group by d order by d`, ws)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
+		return
+	}
+	defer rows.Close()
+	data := []map[string]any{}
+	for rows.Next() {
+		var d string
+		var created, completed int
+		if rows.Scan(&d, &created, &completed) == nil {
+			data = append(data, map[string]any{"key": d, "name": d, "count": created, "completed_issues": completed, "created_issues": created})
+		}
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"data":   data,
+		"schema": map[string]any{"completed_issues": "completed_issues", "created_issues": "created_issues"},
+	})
 }
 
 // ---- shared ----------------------------------------------------------------
