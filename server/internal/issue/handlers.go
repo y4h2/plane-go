@@ -161,7 +161,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	groupBy := r.URL.Query().Get("group_by")
-	if groupBy != "" && !allowedGroupBy[groupBy] {
+	if groupBy != "" && !ValidGroupBy(groupBy) {
 		httpx.Detail(w, http.StatusBadRequest, "Invalid group_by field: "+groupBy)
 		return
 	}
@@ -170,26 +170,60 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
 		return
 	}
+	httpx.JSON(w, http.StatusOK, ListEnvelope(issues, groupBy))
+}
+
+// ValidGroupBy reports whether field is an accepted group_by (else the caller
+// should 400). Shared by the cycle/module issue-list endpoints.
+func ValidGroupBy(field string) bool { return allowedGroupBy[field] }
+
+// ListEnvelope builds an issue-list response: a flat cursor envelope when
+// groupBy is empty, or a grouped envelope keyed by the group field where each
+// group is a {results, total_results} sub-envelope (the shape the frontend's
+// grouped/kanban renderer expects — a bare list renders empty). Reused by the
+// cycle-issues and module-issues lists so their boards group correctly too.
+func ListEnvelope(issues []gen.Issue, groupBy string) map[string]any {
 	if groupBy == "" {
 		vals := make([]map[string]any, 0, len(issues))
 		for _, i := range issues {
 			vals = append(vals, Values(i))
 		}
-		httpx.JSON(w, http.StatusOK, Envelope(vals, len(issues), nil))
-		return
+		return Envelope(vals, len(issues), nil)
 	}
 	lists := map[string][]map[string]any{}
 	for _, i := range issues {
 		k := groupKey(i, groupBy)
 		lists[k] = append(lists[k], Values(i))
 	}
-	// Each group value is a sub-envelope {results, total_results}, not a bare
-	// list — the frontend's grouped/kanban renderer reads group.results.
 	groups := make(map[string]any, len(lists))
 	for k, v := range lists {
 		groups[k] = map[string]any{"results": v, "total_results": len(v)}
 	}
-	httpx.JSON(w, http.StatusOK, Envelope(groups, len(issues), &groupBy))
+	return Envelope(groups, len(issues), &groupBy)
+}
+
+// GroupValues is like ListEnvelope but operates on already-built .values() dicts
+// (for callers that post-process each value, e.g. module-issues injecting
+// module_ids). Groups on the value map's own group_by key.
+func GroupValues(vals []map[string]any, groupBy string) map[string]any {
+	if groupBy == "" {
+		return Envelope(vals, len(vals), nil)
+	}
+	lists := map[string][]map[string]any{}
+	for _, v := range vals {
+		k := "None"
+		if raw, ok := v[groupBy]; ok && raw != nil {
+			if s, ok := raw.(string); ok && s != "" {
+				k = s
+			}
+		}
+		lists[k] = append(lists[k], v)
+	}
+	groups := make(map[string]any, len(lists))
+	for k, v := range lists {
+		groups[k] = map[string]any{"results": v, "total_results": len(v)}
+	}
+	return Envelope(groups, len(vals), &groupBy)
 }
 
 func groupKey(i gen.Issue, field string) string {

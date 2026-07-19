@@ -334,6 +334,11 @@ func (h *Handler) listIssues(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		return
 	}
+	groupBy := r.URL.Query().Get("group_by")
+	if groupBy != "" && !issue.ValidGroupBy(groupBy) {
+		httpx.Detail(w, http.StatusBadRequest, "Invalid group_by field: "+groupBy)
+		return
+	}
 	issues, err := h.q.ListModuleIssueIssues(ctx, m.ID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
@@ -345,7 +350,7 @@ func (h *Handler) listIssues(w http.ResponseWriter, r *http.Request) {
 		v["module_ids"] = []string{m.ID.String()} // these issues belong to this module
 		vals = append(vals, v)
 	}
-	httpx.JSON(w, http.StatusOK, issue.Envelope(vals, len(vals), nil))
+	httpx.JSON(w, http.StatusOK, issue.GroupValues(vals, groupBy))
 }
 
 func (h *Handler) addIssues(w http.ResponseWriter, r *http.Request) {

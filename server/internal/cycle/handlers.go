@@ -363,16 +363,17 @@ func (h *Handler) listIssues(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		return
 	}
+	groupBy := r.URL.Query().Get("group_by")
+	if groupBy != "" && !issue.ValidGroupBy(groupBy) {
+		httpx.Detail(w, http.StatusBadRequest, "Invalid group_by field: "+groupBy)
+		return
+	}
 	issues, err := h.q.ListCycleIssueIssues(ctx, c.ID)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
 		return
 	}
-	vals := make([]map[string]any, 0, len(issues))
-	for _, i := range issues {
-		vals = append(vals, issue.Values(i))
-	}
-	httpx.JSON(w, http.StatusOK, issue.Envelope(vals, len(vals), nil))
+	httpx.JSON(w, http.StatusOK, issue.ListEnvelope(issues, groupBy))
 }
 
 func (h *Handler) addIssues(w http.ResponseWriter, r *http.Request) {
