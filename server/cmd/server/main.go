@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"planego/internal/analytic"
+	"planego/internal/analyticview"
 	"planego/internal/apitoken"
 	"planego/internal/archive"
 	"planego/internal/asset"
@@ -41,6 +42,7 @@ import (
 	"planego/internal/viewextra"
 	"planego/internal/webhook"
 	"planego/internal/workspace"
+	"planego/internal/wslist"
 	"planego/internal/wsextra"
 )
 
@@ -87,6 +89,8 @@ func main() {
 	ux := userextra.New(pool)
 	it := issuetail.New(pool)
 	ep := entityprops.New(pool)
+	av := analyticview.New(pool)
+	wl := wslist.New(pool)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -139,6 +143,8 @@ func main() {
 			ux.Routes(r)
 			it.Routes(r)
 			ep.Routes(r)
+			av.Routes(r)
+			wl.Routes(r)
 		})
 	})
 

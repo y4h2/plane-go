@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AnalyticView struct {
+	ID          uuid.UUID   `json:"id"`
+	WorkspaceID uuid.UUID   `json:"workspace_id"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Query       []byte      `json:"query"`
+	QueryDict   []byte      `json:"query_dict"`
+	CreatedBy   pgtype.UUID `json:"created_by"`
+	UpdatedBy   pgtype.UUID `json:"updated_by"`
+	DeletedAt   *time.Time  `json:"deleted_at"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
 type ApiToken struct {
 	ID               uuid.UUID   `json:"id"`
 	Label            string      `json:"label"`
@@ -43,6 +57,7 @@ type Asset struct {
 	EntityIdentifier string      `json:"entity_identifier"`
 	IsUploaded       bool        `json:"is_uploaded"`
 	CreatedAt        time.Time   `json:"created_at"`
+	DeletedAt        *time.Time  `json:"deleted_at"`
 }
 
 type Cycle struct {
@@ -69,6 +84,19 @@ type CycleIssue struct {
 	CycleID     uuid.UUID `json:"cycle_id"`
 	IssueID     uuid.UUID `json:"issue_id"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type CycleUserProperty struct {
+	ID                uuid.UUID `json:"id"`
+	WorkspaceID       uuid.UUID `json:"workspace_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	CycleID           uuid.UUID `json:"cycle_id"`
+	UserID            uuid.UUID `json:"user_id"`
+	Filters           []byte    `json:"filters"`
+	DisplayFilters    []byte    `json:"display_filters"`
+	DisplayProperties []byte    `json:"display_properties"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type DraftIssue struct {
@@ -293,6 +321,19 @@ type ModuleIssue struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type ModuleUserProperty struct {
+	ID                uuid.UUID `json:"id"`
+	WorkspaceID       uuid.UUID `json:"workspace_id"`
+	ProjectID         uuid.UUID `json:"project_id"`
+	ModuleID          uuid.UUID `json:"module_id"`
+	UserID            uuid.UUID `json:"user_id"`
+	Filters           []byte    `json:"filters"`
+	DisplayFilters    []byte    `json:"display_filters"`
+	DisplayProperties []byte    `json:"display_properties"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
 type Page struct {
 	ID              uuid.UUID   `json:"id"`
 	WorkspaceID     uuid.UUID   `json:"workspace_id"`
@@ -314,20 +355,28 @@ type Page struct {
 }
 
 type Project struct {
-	ID              uuid.UUID   `json:"id"`
-	WorkspaceID     uuid.UUID   `json:"workspace_id"`
-	Name            string      `json:"name"`
-	Identifier      string      `json:"identifier"`
-	Description     string      `json:"description"`
-	Network         int16       `json:"network"`
-	SortOrder       float64     `json:"sort_order"`
-	CreatedBy       pgtype.UUID `json:"created_by"`
-	UpdatedBy       pgtype.UUID `json:"updated_by"`
-	DeletedAt       *time.Time  `json:"deleted_at"`
-	CreatedAt       time.Time   `json:"created_at"`
-	UpdatedAt       time.Time   `json:"updated_at"`
-	CoverImageAsset pgtype.UUID `json:"cover_image_asset"`
-	ArchivedAt      *time.Time  `json:"archived_at"`
+	ID                    uuid.UUID   `json:"id"`
+	WorkspaceID           uuid.UUID   `json:"workspace_id"`
+	Name                  string      `json:"name"`
+	Identifier            string      `json:"identifier"`
+	Description           string      `json:"description"`
+	Network               int16       `json:"network"`
+	SortOrder             float64     `json:"sort_order"`
+	CreatedBy             pgtype.UUID `json:"created_by"`
+	UpdatedBy             pgtype.UUID `json:"updated_by"`
+	DeletedAt             *time.Time  `json:"deleted_at"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
+	CoverImageAsset       pgtype.UUID `json:"cover_image_asset"`
+	ArchivedAt            *time.Time  `json:"archived_at"`
+	ModuleView            bool        `json:"module_view"`
+	CycleView             bool        `json:"cycle_view"`
+	IssueViewsView        bool        `json:"issue_views_view"`
+	PageView              bool        `json:"page_view"`
+	IntakeView            bool        `json:"intake_view"`
+	IsTimeTrackingEnabled bool        `json:"is_time_tracking_enabled"`
+	IsIssueTypeEnabled    bool        `json:"is_issue_type_enabled"`
+	GuestViewAllFeatures  bool        `json:"guest_view_all_features"`
 }
 
 type ProjectMember struct {

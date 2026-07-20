@@ -81,7 +81,7 @@ func (q *Queries) DeleteRelation(ctx context.Context, arg DeleteRelationParams) 
 }
 
 const listIssueAttachments = `-- name: ListIssueAttachments :many
-select id, workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier, is_uploaded, created_at from assets where entity_type = 'ISSUE_ATTACHMENT' and entity_identifier = $1 and is_uploaded = true order by created_at
+select id, workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier, is_uploaded, created_at, deleted_at from assets where entity_type = 'ISSUE_ATTACHMENT' and entity_identifier = $1 and is_uploaded = true order by created_at
 `
 
 func (q *Queries) ListIssueAttachments(ctx context.Context, entityIdentifier string) ([]Asset, error) {
@@ -105,6 +105,7 @@ func (q *Queries) ListIssueAttachments(ctx context.Context, entityIdentifier str
 			&i.EntityIdentifier,
 			&i.IsUploaded,
 			&i.CreatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}

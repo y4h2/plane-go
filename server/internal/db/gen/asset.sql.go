@@ -15,7 +15,7 @@ import (
 const createAsset = `-- name: CreateAsset :one
 insert into assets (workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier)
 values ($1, $2, $3, $4, $5, $6, $7, $8)
-returning id, workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier, is_uploaded, created_at
+returning id, workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier, is_uploaded, created_at, deleted_at
 `
 
 type CreateAssetParams struct {
@@ -53,12 +53,13 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 		&i.EntityIdentifier,
 		&i.IsUploaded,
 		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getAsset = `-- name: GetAsset :one
-select id, workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier, is_uploaded, created_at from assets where id = $1
+select id, workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier, is_uploaded, created_at, deleted_at from assets where id = $1
 `
 
 func (q *Queries) GetAsset(ctx context.Context, id uuid.UUID) (Asset, error) {
@@ -76,6 +77,36 @@ func (q *Queries) GetAsset(ctx context.Context, id uuid.UUID) (Asset, error) {
 		&i.EntityIdentifier,
 		&i.IsUploaded,
 		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getAssetInWorkspace = `-- name: GetAssetInWorkspace :one
+select id, workspace_id, project_id, user_id, name, content_type, size, entity_type, entity_identifier, is_uploaded, created_at, deleted_at from assets where id = $1 and workspace_id = $2
+`
+
+type GetAssetInWorkspaceParams struct {
+	ID          uuid.UUID   `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) GetAssetInWorkspace(ctx context.Context, arg GetAssetInWorkspaceParams) (Asset, error) {
+	row := q.db.QueryRow(ctx, getAssetInWorkspace, arg.ID, arg.WorkspaceID)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.ProjectID,
+		&i.UserID,
+		&i.Name,
+		&i.ContentType,
+		&i.Size,
+		&i.EntityType,
+		&i.EntityIdentifier,
+		&i.IsUploaded,
+		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -86,6 +117,15 @@ update assets set is_uploaded = true where id = $1
 
 func (q *Queries) MarkAssetUploaded(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markAssetUploaded, id)
+	return err
+}
+
+const restoreAsset = `-- name: RestoreAsset :exec
+update assets set deleted_at = null where id = $1
+`
+
+func (q *Queries) RestoreAsset(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, restoreAsset, id)
 	return err
 }
 
@@ -101,5 +141,14 @@ type SetProjectCoverParams struct {
 
 func (q *Queries) SetProjectCover(ctx context.Context, arg SetProjectCoverParams) error {
 	_, err := q.db.Exec(ctx, setProjectCover, arg.ID, arg.WorkspaceID, arg.CoverImageAsset)
+	return err
+}
+
+const softDeleteAsset = `-- name: SoftDeleteAsset :exec
+update assets set deleted_at = now() where id = $1
+`
+
+func (q *Queries) SoftDeleteAsset(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteAsset, id)
 	return err
 }

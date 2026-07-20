@@ -30,7 +30,7 @@ func (q *Queries) ArchiveProject(ctx context.Context, arg ArchiveProjectParams) 
 const createProject = `-- name: CreateProject :one
 insert into projects (workspace_id, name, identifier, description, created_by)
 values ($1, $2, $3, $4, $5)
-returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at
+returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at, module_view, cycle_view, issue_views_view, page_view, intake_view, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features
 `
 
 type CreateProjectParams struct {
@@ -65,12 +65,20 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.UpdatedAt,
 		&i.CoverImageAsset,
 		&i.ArchivedAt,
+		&i.ModuleView,
+		&i.CycleView,
+		&i.IssueViewsView,
+		&i.PageView,
+		&i.IntakeView,
+		&i.IsTimeTrackingEnabled,
+		&i.IsIssueTypeEnabled,
+		&i.GuestViewAllFeatures,
 	)
 	return i, err
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-select id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at from projects where id = $1 and workspace_id = $2 and deleted_at is null
+select id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at, module_view, cycle_view, issue_views_view, page_view, intake_view, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features from projects where id = $1 and workspace_id = $2 and deleted_at is null
 `
 
 type GetProjectByIDParams struct {
@@ -96,6 +104,14 @@ func (q *Queries) GetProjectByID(ctx context.Context, arg GetProjectByIDParams) 
 		&i.UpdatedAt,
 		&i.CoverImageAsset,
 		&i.ArchivedAt,
+		&i.ModuleView,
+		&i.CycleView,
+		&i.IssueViewsView,
+		&i.PageView,
+		&i.IntakeView,
+		&i.IsTimeTrackingEnabled,
+		&i.IsIssueTypeEnabled,
+		&i.GuestViewAllFeatures,
 	)
 	return i, err
 }
@@ -137,7 +153,7 @@ func (q *Queries) ListProjectIdentifiers(ctx context.Context, arg ListProjectIde
 }
 
 const listProjects = `-- name: ListProjects :many
-select p.id, p.workspace_id, p.name, p.identifier, p.description, p.network, p.sort_order, p.created_by, p.updated_by, p.deleted_at, p.created_at, p.updated_at, p.cover_image_asset, p.archived_at, coalesce(pm.role, 0)::smallint as member_role
+select p.id, p.workspace_id, p.name, p.identifier, p.description, p.network, p.sort_order, p.created_by, p.updated_by, p.deleted_at, p.created_at, p.updated_at, p.cover_image_asset, p.archived_at, p.module_view, p.cycle_view, p.issue_views_view, p.page_view, p.intake_view, p.is_time_tracking_enabled, p.is_issue_type_enabled, p.guest_view_all_features, coalesce(pm.role, 0)::smallint as member_role
 from projects p
 left join project_members pm on pm.project_id = p.id and pm.member_id = $2
 where p.workspace_id = $1 and p.deleted_at is null
@@ -150,21 +166,29 @@ type ListProjectsParams struct {
 }
 
 type ListProjectsRow struct {
-	ID              uuid.UUID   `json:"id"`
-	WorkspaceID     uuid.UUID   `json:"workspace_id"`
-	Name            string      `json:"name"`
-	Identifier      string      `json:"identifier"`
-	Description     string      `json:"description"`
-	Network         int16       `json:"network"`
-	SortOrder       float64     `json:"sort_order"`
-	CreatedBy       pgtype.UUID `json:"created_by"`
-	UpdatedBy       pgtype.UUID `json:"updated_by"`
-	DeletedAt       *time.Time  `json:"deleted_at"`
-	CreatedAt       time.Time   `json:"created_at"`
-	UpdatedAt       time.Time   `json:"updated_at"`
-	CoverImageAsset pgtype.UUID `json:"cover_image_asset"`
-	ArchivedAt      *time.Time  `json:"archived_at"`
-	MemberRole      int16       `json:"member_role"`
+	ID                    uuid.UUID   `json:"id"`
+	WorkspaceID           uuid.UUID   `json:"workspace_id"`
+	Name                  string      `json:"name"`
+	Identifier            string      `json:"identifier"`
+	Description           string      `json:"description"`
+	Network               int16       `json:"network"`
+	SortOrder             float64     `json:"sort_order"`
+	CreatedBy             pgtype.UUID `json:"created_by"`
+	UpdatedBy             pgtype.UUID `json:"updated_by"`
+	DeletedAt             *time.Time  `json:"deleted_at"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
+	CoverImageAsset       pgtype.UUID `json:"cover_image_asset"`
+	ArchivedAt            *time.Time  `json:"archived_at"`
+	ModuleView            bool        `json:"module_view"`
+	CycleView             bool        `json:"cycle_view"`
+	IssueViewsView        bool        `json:"issue_views_view"`
+	PageView              bool        `json:"page_view"`
+	IntakeView            bool        `json:"intake_view"`
+	IsTimeTrackingEnabled bool        `json:"is_time_tracking_enabled"`
+	IsIssueTypeEnabled    bool        `json:"is_issue_type_enabled"`
+	GuestViewAllFeatures  bool        `json:"guest_view_all_features"`
+	MemberRole            int16       `json:"member_role"`
 }
 
 func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]ListProjectsRow, error) {
@@ -191,6 +215,14 @@ func (q *Queries) ListProjects(ctx context.Context, arg ListProjectsParams) ([]L
 			&i.UpdatedAt,
 			&i.CoverImageAsset,
 			&i.ArchivedAt,
+			&i.ModuleView,
+			&i.CycleView,
+			&i.IssueViewsView,
+			&i.PageView,
+			&i.IntakeView,
+			&i.IsTimeTrackingEnabled,
+			&i.IsIssueTypeEnabled,
+			&i.GuestViewAllFeatures,
 			&i.MemberRole,
 		); err != nil {
 			return nil, err
@@ -217,6 +249,198 @@ func (q *Queries) ProjectIdentifierExists(ctx context.Context, arg ProjectIdenti
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const searchProjectIssues = `-- name: SearchProjectIssues :many
+select
+    i.id,
+    i.name,
+    i.start_date,
+    i.sequence_id,
+    i.project_id,
+    p.name as project_name,
+    p.identifier as project_identifier,
+    w.slug as workspace_slug,
+    coalesce(s.name, '') as state_name,
+    coalesce(s.group_name, '') as state_group,
+    coalesce(s.color, '') as state_color
+from issues i
+join projects p on p.id = i.project_id
+join workspaces w on w.id = p.workspace_id
+join project_members pm on pm.project_id = i.project_id and pm.member_id = $2
+left join states s on s.id = i.state_id
+where p.id = $3
+  and w.slug = $1
+  and i.deleted_at is null
+  and p.deleted_at is null
+  and p.archived_at is null
+  and (
+    $4::text = ''
+    or i.name ilike '%' || $4 || '%'
+    or p.identifier ilike '%' || $4 || '%'
+    or i.sequence_id = any($5::int[])
+  )
+order by i.created_at desc
+limit 100
+`
+
+type SearchProjectIssuesParams struct {
+	Slug     string    `json:"slug"`
+	MemberID uuid.UUID `json:"member_id"`
+	ID       uuid.UUID `json:"id"`
+	Column4  string    `json:"column_4"`
+	Column5  []int32   `json:"column_5"`
+}
+
+type SearchProjectIssuesRow struct {
+	ID                uuid.UUID   `json:"id"`
+	Name              string      `json:"name"`
+	StartDate         pgtype.Date `json:"start_date"`
+	SequenceID        int32       `json:"sequence_id"`
+	ProjectID         uuid.UUID   `json:"project_id"`
+	ProjectName       string      `json:"project_name"`
+	ProjectIdentifier string      `json:"project_identifier"`
+	WorkspaceSlug     string      `json:"workspace_slug"`
+	StateName         string      `json:"state_name"`
+	StateGroup        string      `json:"state_group"`
+	StateColor        string      `json:"state_color"`
+}
+
+// Backs the project-scoped issue search endpoint (search-issues/) in its
+// default (workspace_search=false) mode: results are scoped to one project.
+// $4 is the free-text query (” means "no text filter", i.e. every issue in
+// scope). $5 is the set of numeric substrings pulled from the query text by the
+// caller (Django also OR-matches query digits against sequence_id); an empty
+// array is a no-op in the `= any(...)` check.
+func (q *Queries) SearchProjectIssues(ctx context.Context, arg SearchProjectIssuesParams) ([]SearchProjectIssuesRow, error) {
+	rows, err := q.db.Query(ctx, searchProjectIssues,
+		arg.Slug,
+		arg.MemberID,
+		arg.ID,
+		arg.Column4,
+		arg.Column5,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchProjectIssuesRow{}
+	for rows.Next() {
+		var i SearchProjectIssuesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.StartDate,
+			&i.SequenceID,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ProjectIdentifier,
+			&i.WorkspaceSlug,
+			&i.StateName,
+			&i.StateGroup,
+			&i.StateColor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchWorkspaceIssues = `-- name: SearchWorkspaceIssues :many
+select
+    i.id,
+    i.name,
+    i.start_date,
+    i.sequence_id,
+    i.project_id,
+    p.name as project_name,
+    p.identifier as project_identifier,
+    w.slug as workspace_slug,
+    coalesce(s.name, '') as state_name,
+    coalesce(s.group_name, '') as state_group,
+    coalesce(s.color, '') as state_color
+from issues i
+join projects p on p.id = i.project_id
+join workspaces w on w.id = p.workspace_id
+join project_members pm on pm.project_id = i.project_id and pm.member_id = $2
+left join states s on s.id = i.state_id
+where w.slug = $1
+  and i.deleted_at is null
+  and p.deleted_at is null
+  and p.archived_at is null
+  and (
+    $3::text = ''
+    or i.name ilike '%' || $3 || '%'
+    or p.identifier ilike '%' || $3 || '%'
+    or i.sequence_id = any($4::int[])
+  )
+order by i.created_at desc
+limit 100
+`
+
+type SearchWorkspaceIssuesParams struct {
+	Slug     string    `json:"slug"`
+	MemberID uuid.UUID `json:"member_id"`
+	Column3  string    `json:"column_3"`
+	Column4  []int32   `json:"column_4"`
+}
+
+type SearchWorkspaceIssuesRow struct {
+	ID                uuid.UUID   `json:"id"`
+	Name              string      `json:"name"`
+	StartDate         pgtype.Date `json:"start_date"`
+	SequenceID        int32       `json:"sequence_id"`
+	ProjectID         uuid.UUID   `json:"project_id"`
+	ProjectName       string      `json:"project_name"`
+	ProjectIdentifier string      `json:"project_identifier"`
+	WorkspaceSlug     string      `json:"workspace_slug"`
+	StateName         string      `json:"state_name"`
+	StateGroup        string      `json:"state_group"`
+	StateColor        string      `json:"state_color"`
+}
+
+// Backs search-issues/ in workspace_search=true mode: results span every
+// project in the workspace the caller is a member of. Same param semantics as
+// SearchProjectIssues minus the project scoping.
+func (q *Queries) SearchWorkspaceIssues(ctx context.Context, arg SearchWorkspaceIssuesParams) ([]SearchWorkspaceIssuesRow, error) {
+	rows, err := q.db.Query(ctx, searchWorkspaceIssues,
+		arg.Slug,
+		arg.MemberID,
+		arg.Column3,
+		arg.Column4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchWorkspaceIssuesRow{}
+	for rows.Next() {
+		var i SearchWorkspaceIssuesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.StartDate,
+			&i.SequenceID,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ProjectIdentifier,
+			&i.WorkspaceSlug,
+			&i.StateName,
+			&i.StateGroup,
+			&i.StateColor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const softDeleteProject = `-- name: SoftDeleteProject :exec
@@ -254,7 +478,7 @@ update projects set
     updated_by  = $5,
     updated_at  = now()
 where id = $1 and workspace_id = $2 and deleted_at is null
-returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at
+returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at, module_view, cycle_view, issue_views_view, page_view, intake_view, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features
 `
 
 type UpdateProjectParams struct {
@@ -289,6 +513,92 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.UpdatedAt,
 		&i.CoverImageAsset,
 		&i.ArchivedAt,
+		&i.ModuleView,
+		&i.CycleView,
+		&i.IssueViewsView,
+		&i.PageView,
+		&i.IntakeView,
+		&i.IsTimeTrackingEnabled,
+		&i.IsIssueTypeEnabled,
+		&i.GuestViewAllFeatures,
+	)
+	return i, err
+}
+
+const updateProjectFeatures = `-- name: UpdateProjectFeatures :one
+update projects set
+    name                      = $3,
+    description               = $4,
+    module_view               = $5,
+    cycle_view                = $6,
+    issue_views_view          = $7,
+    page_view                 = $8,
+    intake_view               = $9,
+    is_time_tracking_enabled  = $10,
+    is_issue_type_enabled     = $11,
+    guest_view_all_features   = $12,
+    updated_by                = $13,
+    updated_at                = now()
+where id = $1 and workspace_id = $2 and deleted_at is null
+returning id, workspace_id, name, identifier, description, network, sort_order, created_by, updated_by, deleted_at, created_at, updated_at, cover_image_asset, archived_at, module_view, cycle_view, issue_views_view, page_view, intake_view, is_time_tracking_enabled, is_issue_type_enabled, guest_view_all_features
+`
+
+type UpdateProjectFeaturesParams struct {
+	ID                    uuid.UUID   `json:"id"`
+	WorkspaceID           uuid.UUID   `json:"workspace_id"`
+	Name                  string      `json:"name"`
+	Description           string      `json:"description"`
+	ModuleView            bool        `json:"module_view"`
+	CycleView             bool        `json:"cycle_view"`
+	IssueViewsView        bool        `json:"issue_views_view"`
+	PageView              bool        `json:"page_view"`
+	IntakeView            bool        `json:"intake_view"`
+	IsTimeTrackingEnabled bool        `json:"is_time_tracking_enabled"`
+	IsIssueTypeEnabled    bool        `json:"is_issue_type_enabled"`
+	GuestViewAllFeatures  bool        `json:"guest_view_all_features"`
+	UpdatedBy             pgtype.UUID `json:"updated_by"`
+}
+
+func (q *Queries) UpdateProjectFeatures(ctx context.Context, arg UpdateProjectFeaturesParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProjectFeatures,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Name,
+		arg.Description,
+		arg.ModuleView,
+		arg.CycleView,
+		arg.IssueViewsView,
+		arg.PageView,
+		arg.IntakeView,
+		arg.IsTimeTrackingEnabled,
+		arg.IsIssueTypeEnabled,
+		arg.GuestViewAllFeatures,
+		arg.UpdatedBy,
+	)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Identifier,
+		&i.Description,
+		&i.Network,
+		&i.SortOrder,
+		&i.CreatedBy,
+		&i.UpdatedBy,
+		&i.DeletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CoverImageAsset,
+		&i.ArchivedAt,
+		&i.ModuleView,
+		&i.CycleView,
+		&i.IssueViewsView,
+		&i.PageView,
+		&i.IntakeView,
+		&i.IsTimeTrackingEnabled,
+		&i.IsIssueTypeEnabled,
+		&i.GuestViewAllFeatures,
 	)
 	return i, err
 }

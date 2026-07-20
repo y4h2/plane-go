@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +48,8 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/projects/{project_id}/members/{member_id}/", h.retrieveMember)
 	r.Patch("/workspaces/{slug}/projects/{project_id}/members/{member_id}/", h.updateMember)
 	r.Get("/workspaces/{slug}/projects/{project_id}/project-members/me/", h.membersMe)
+	// project-scoped issue search (IssueSearchEndpoint)
+	r.Get("/workspaces/{slug}/projects/{project_id}/search-issues/", h.searchIssues)
 }
 
 func (h *Handler) updateMember(w http.ResponseWriter, r *http.Request) {
@@ -138,29 +142,37 @@ type projectResponse struct {
 
 func projectResp(p gen.Project, memberRole *int, members []string) projectResponse {
 	return projectResponse{
-		ID:                   p.ID.String(),
-		CreatedAt:            p.CreatedAt,
-		UpdatedAt:            p.UpdatedAt,
-		CreatedBy:            dbx.StrPtr(p.CreatedBy),
-		UpdatedBy:            dbx.StrPtr(p.UpdatedBy),
-		DeletedAt:            p.DeletedAt,
-		Name:                 p.Name,
-		Description:          p.Description,
-		Network:              int(p.Network),
-		Workspace:            p.WorkspaceID.String(),
-		Identifier:           p.Identifier,
-		ModuleView:           true,
-		CycleView:            true,
-		IssueViewsView:       true,
-		PageView:             true,
-		LogoProps:            map[string]any{},
-		Timezone:             "UTC",
-		SortOrder:            httpx.Float(p.SortOrder),
-		MemberRole:           memberRole,
-		Members:              members,
-		NextWorkItemSequence: 1,
-		CoverImageAsset:      dbx.StrPtr(p.CoverImageAsset),
-		CoverImageURL:        coverURL(p.CoverImageAsset),
+		ID:                    p.ID.String(),
+		CreatedAt:             p.CreatedAt,
+		UpdatedAt:             p.UpdatedAt,
+		CreatedBy:             dbx.StrPtr(p.CreatedBy),
+		UpdatedBy:             dbx.StrPtr(p.UpdatedBy),
+		DeletedAt:             p.DeletedAt,
+		Name:                  p.Name,
+		Description:           p.Description,
+		Network:               int(p.Network),
+		Workspace:             p.WorkspaceID.String(),
+		Identifier:            p.Identifier,
+		ModuleView:            p.ModuleView,
+		CycleView:             p.CycleView,
+		IssueViewsView:        p.IssueViewsView,
+		PageView:              p.PageView,
+		IntakeView:            p.IntakeView,
+		IsTimeTrackingEnabled: p.IsTimeTrackingEnabled,
+		IsIssueTypeEnabled:    p.IsIssueTypeEnabled,
+		GuestViewAllFeatures:  p.GuestViewAllFeatures,
+		LogoProps:             map[string]any{},
+		Timezone:              "UTC",
+		SortOrder:             httpx.Float(p.SortOrder),
+		MemberRole:            memberRole,
+		Members:               members,
+		NextWorkItemSequence:  1,
+		CoverImageAsset:       dbx.StrPtr(p.CoverImageAsset),
+		CoverImageURL:         coverURL(p.CoverImageAsset),
+		// QUIRK (matches Django): `inbox_view` is a read-only alias mirroring
+		// `intake_view` on the wire, but the PATCH handler only writes intake_view
+		// when the caller sends `inbox_view` in the request body (see update()).
+		InboxView: p.IntakeView,
 	}
 }
 
@@ -365,9 +377,28 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
 		return
 	}
+	u, _ := auth.UserFrom(ctx)
+	// Matches Django: only a workspace admin OR a project admin (role 20) may
+	// PATCH a project. Any other project member (or non-member) gets 403.
+	if !h.isWorkspaceOrProjectAdmin(ctx, ws.ID, pid, u.ID) {
+		httpx.Error(w, http.StatusForbidden, "You don't have the required permissions.")
+		return
+	}
 	var body struct {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
+		ModuleView  *bool   `json:"module_view"`
+		CycleView   *bool   `json:"cycle_view"`
+		IssueViews  *bool   `json:"issue_views_view"`
+		PageView    *bool   `json:"page_view"`
+		// QUIRK (matches Django): the intake toggle is only settable through the
+		// `inbox_view` alias -- a bare `intake_view` key in the body is ignored,
+		// mirroring plane/app/views/project/base.py's
+		// `intake_view = request.data.get("inbox_view", project.intake_view)`.
+		InboxView      *bool `json:"inbox_view"`
+		TimeTracking   *bool `json:"is_time_tracking_enabled"`
+		IssueType      *bool `json:"is_issue_type_enabled"`
+		GuestAllViewFn *bool `json:"guest_view_all_features"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	name, desc := p.Name, p.Description
@@ -377,9 +408,38 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if body.Description != nil {
 		desc = *body.Description
 	}
-	u, _ := auth.UserFrom(ctx)
-	updated, err := h.q.UpdateProject(ctx, gen.UpdateProjectParams{
-		ID: pid, WorkspaceID: ws.ID, Name: name, Description: desc, UpdatedBy: dbx.PgUUID(u.ID),
+	moduleView, cycleView, issueViewsView, pageView := p.ModuleView, p.CycleView, p.IssueViewsView, p.PageView
+	intakeView := p.IntakeView
+	timeTracking, issueType, guestViewAll := p.IsTimeTrackingEnabled, p.IsIssueTypeEnabled, p.GuestViewAllFeatures
+	if body.ModuleView != nil {
+		moduleView = *body.ModuleView
+	}
+	if body.CycleView != nil {
+		cycleView = *body.CycleView
+	}
+	if body.IssueViews != nil {
+		issueViewsView = *body.IssueViews
+	}
+	if body.PageView != nil {
+		pageView = *body.PageView
+	}
+	if body.InboxView != nil {
+		intakeView = *body.InboxView
+	}
+	if body.TimeTracking != nil {
+		timeTracking = *body.TimeTracking
+	}
+	if body.IssueType != nil {
+		issueType = *body.IssueType
+	}
+	if body.GuestAllViewFn != nil {
+		guestViewAll = *body.GuestAllViewFn
+	}
+	updated, err := h.q.UpdateProjectFeatures(ctx, gen.UpdateProjectFeaturesParams{
+		ID: pid, WorkspaceID: ws.ID, Name: name, Description: desc,
+		ModuleView: moduleView, CycleView: cycleView, IssueViewsView: issueViewsView, PageView: pageView,
+		IntakeView: intakeView, IsTimeTrackingEnabled: timeTracking, IsIssueTypeEnabled: issueType,
+		GuestViewAllFeatures: guestViewAll, UpdatedBy: dbx.PgUUID(u.ID),
 	})
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
@@ -391,6 +451,20 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		role = &ri
 	}
 	httpx.JSON(w, http.StatusOK, projectResp(updated, role, h.memberIDs(ctx, pid)))
+}
+
+// isWorkspaceOrProjectAdmin matches Django's partial_update permission check:
+// the caller must be either a workspace admin (role 20) or a project admin
+// (role 20) of this specific project. Any other role -- or no relationship at
+// all -- is denied.
+func (h *Handler) isWorkspaceOrProjectAdmin(ctx context.Context, workspaceID, projectID, userID uuid.UUID) bool {
+	if role, err := h.q.GetWorkspaceMemberRole(ctx, gen.GetWorkspaceMemberRoleParams{WorkspaceID: workspaceID, MemberID: userID}); err == nil && int(role) == roleAdmin {
+		return true
+	}
+	if pm, err := h.q.GetProjectMemberByUser(ctx, gen.GetProjectMemberByUserParams{ProjectID: projectID, MemberID: userID}); err == nil && int(pm.Role) == roleAdmin {
+		return true
+	}
+	return false
 }
 
 func (h *Handler) destroy(w http.ResponseWriter, r *http.Request) {
@@ -439,6 +513,116 @@ func (h *Handler) unarchive(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.q.UnarchiveProject(ctx, gen.UnarchiveProjectParams{ID: pid, WorkspaceID: ws.ID})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// searchIssueRow is the exact 11-key bare `.values()` row IssueSearchEndpoint
+// returns (dunder-joined related-field names preserved verbatim).
+type searchIssueRow struct {
+	Name              string `json:"name"`
+	ID                string `json:"id"`
+	StartDate         any    `json:"start_date"`
+	SequenceID        int    `json:"sequence_id"`
+	ProjectName       string `json:"project__name"`
+	ProjectIdentifier string `json:"project__identifier"`
+	ProjectID         string `json:"project_id"`
+	WorkspaceSlug     string `json:"workspace__slug"`
+	StateName         string `json:"state__name"`
+	StateGroup        string `json:"state__group"`
+	StateColor        string `json:"state__color"`
+}
+
+// seqDigitsRe extracts the same "\b\d+\b" substrings Django's search_issues()
+// pulls out of the query text to OR-match against sequence_id.
+var seqDigitsRe = regexp.MustCompile(`\b\d+\b`)
+
+// searchIssues backs GET .../projects/{project_id}/search-issues/
+// (IssueSearchEndpoint). Only the `search` and `workspace_search` query params
+// are implemented -- the reference also accepts parent/issue_relation/cycle/
+// module/sub_issue/target_date/issue_id narrowing filters, which are out of
+// scope here (not exercised by the frontend's project-scoped picker this
+// endpoint primarily serves).
+func (h *Handler) searchIssues(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ws, ok := h.workspace(ctx, w, chi.URLParam(r, "slug"))
+	if !ok {
+		return
+	}
+	pid, err := uuid.Parse(chi.URLParam(r, "project_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	u, _ := auth.UserFrom(ctx)
+	query := r.URL.Query().Get("search")
+	workspaceSearch := r.URL.Query().Get("workspace_search") == "true"
+
+	var seqIDs []int32
+	if query != "" && len(query) <= 20 {
+		for _, m := range seqDigitsRe.FindAllString(query, -1) {
+			if n, err := strconv.ParseInt(m, 10, 32); err == nil {
+				seqIDs = append(seqIDs, int32(n))
+			}
+		}
+	}
+
+	out := make([]searchIssueRow, 0)
+	if workspaceSearch {
+		rows, err := h.q.SearchWorkspaceIssues(ctx, gen.SearchWorkspaceIssuesParams{
+			Slug: ws.Slug, MemberID: u.ID, Column3: query, Column4: seqIDs,
+		})
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
+			return
+		}
+		for _, row := range rows {
+			out = append(out, searchIssueRow{
+				Name:              row.Name,
+				ID:                row.ID.String(),
+				StartDate:         dateVal(row.StartDate),
+				SequenceID:        int(row.SequenceID),
+				ProjectName:       row.ProjectName,
+				ProjectIdentifier: row.ProjectIdentifier,
+				ProjectID:         row.ProjectID.String(),
+				WorkspaceSlug:     row.WorkspaceSlug,
+				StateName:         row.StateName,
+				StateGroup:        row.StateGroup,
+				StateColor:        row.StateColor,
+			})
+		}
+	} else {
+		rows, err := h.q.SearchProjectIssues(ctx, gen.SearchProjectIssuesParams{
+			Slug: ws.Slug, MemberID: u.ID, ID: pid, Column4: query, Column5: seqIDs,
+		})
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
+			return
+		}
+		for _, row := range rows {
+			out = append(out, searchIssueRow{
+				Name:              row.Name,
+				ID:                row.ID.String(),
+				StartDate:         dateVal(row.StartDate),
+				SequenceID:        int(row.SequenceID),
+				ProjectName:       row.ProjectName,
+				ProjectIdentifier: row.ProjectIdentifier,
+				ProjectID:         row.ProjectID.String(),
+				WorkspaceSlug:     row.WorkspaceSlug,
+				StateName:         row.StateName,
+				StateGroup:        row.StateGroup,
+				StateColor:        row.StateColor,
+			})
+		}
+	}
+	httpx.JSON(w, http.StatusOK, out)
+}
+
+// dateVal renders a nullable date column as "YYYY-MM-DD" or null (Django's
+// DateField wire format).
+func dateVal(d pgtype.Date) any {
+	if !d.Valid {
+		return nil
+	}
+	return d.Time.Format("2006-01-02")
 }
 
 func (h *Handler) identifiers(w http.ResponseWriter, r *http.Request) {

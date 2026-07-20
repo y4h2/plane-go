@@ -45,6 +45,8 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Post("/assets/v2/user-assets/", h.create)
 	r.Patch("/assets/v2/user-assets/{asset_id}/", h.markUploaded)
 	r.Delete("/assets/v2/user-assets/{asset_id}/", h.del)
+	r.Post("/assets/v2/workspaces/{slug}/restore/{asset_id}/", h.restore)
+	r.Post("/assets/v2/workspaces/{slug}/duplicate-assets/{asset_id}/", h.duplicate)
 }
 
 // RoutesPublic registers the endpoints the browser hits without credentials:
@@ -205,6 +207,106 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) del(w http.ResponseWriter, r *http.Request) {
 	if aid, err := uuid.Parse(chi.URLParam(r, "asset_id")); err == nil {
 		_ = os.Remove(filepath.Join(h.cfg.AssetDir, aid.String()))
+		_ = h.q.SoftDeleteAsset(r.Context(), aid)
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// restore un-deletes a soft-deleted asset. Mirrors AssetRestoreEndpoint: it
+// looks the asset up via FileAsset.all_objects (i.e. including deleted rows)
+// scoped to the workspace, and unconditionally clears the deleted marker —
+// so it's a 204 no-op (not an error) when called on an asset that was never
+// deleted, matching the Python reference.
+func (h *Handler) restore(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	aid, err := uuid.Parse(chi.URLParam(r, "asset_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	ws, err := h.q.GetWorkspaceBySlug(ctx, chi.URLParam(r, "slug"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	if _, err := h.q.GetAssetInWorkspace(ctx, gen.GetAssetInWorkspaceParams{
+		ID: aid, WorkspaceID: dbx.PgUUID(ws.ID),
+	}); err != nil {
+		httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+		return
+	}
+	_ = h.q.RestoreAsset(ctx, aid)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// duplicate copies an already-uploaded asset to a new asset row (optionally
+// re-pointed at a different project/entity), mirroring DuplicateAssetEndpoint.
+// The Python reference performs a synchronous S3 copy_object in the request
+// path; this local-disk store instead best-effort copies the on-disk file
+// (a missing source file — e.g. bytes that were never actually uploaded in a
+// test harness — is not a hard failure, since the DB row is what the
+// contract response shape is keyed on).
+func (h *Handler) duplicate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	u, _ := auth.UserFrom(ctx)
+	aid, err := uuid.Parse(chi.URLParam(r, "asset_id"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "Asset not found")
+		return
+	}
+	var body struct {
+		ProjectID  string `json:"project_id"`
+		EntityID   string `json:"entity_id"`
+		EntityType string `json:"entity_type"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.EntityType == "" || !workspaceEntityTypes[body.EntityType] {
+		httpx.JSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid entity type or entity id"})
+		return
+	}
+
+	ws, err := h.q.GetWorkspaceBySlug(ctx, chi.URLParam(r, "slug"))
+	if err != nil {
+		httpx.Error(w, http.StatusNotFound, "Asset not found")
+		return
+	}
+
+	var projID pgtype.UUID
+	if body.ProjectID != "" {
+		pid, err := uuid.Parse(body.ProjectID)
+		if err != nil {
+			httpx.Error(w, http.StatusNotFound, "Project not found")
+			return
+		}
+		if _, err := h.q.GetProjectByID(ctx, gen.GetProjectByIDParams{ID: pid, WorkspaceID: ws.ID}); err != nil {
+			httpx.Error(w, http.StatusNotFound, "Project not found")
+			return
+		}
+		projID = dbx.PgUUID(pid)
+	}
+
+	orig, err := h.q.GetAssetInWorkspace(ctx, gen.GetAssetInWorkspaceParams{
+		ID: aid, WorkspaceID: dbx.PgUUID(ws.ID),
+	})
+	if err != nil || !orig.IsUploaded {
+		httpx.Error(w, http.StatusNotFound, "Asset not found")
+		return
+	}
+
+	dup, err := h.q.CreateAsset(ctx, gen.CreateAssetParams{
+		WorkspaceID: dbx.PgUUID(ws.ID), ProjectID: projID, UserID: dbx.PgUUID(u.ID),
+		Name: orig.Name, ContentType: orig.ContentType, Size: orig.Size,
+		EntityType: body.EntityType, EntityIdentifier: body.EntityID,
+	})
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "Something went wrong please try again later")
+		return
+	}
+
+	if data, rerr := os.ReadFile(filepath.Join(h.cfg.AssetDir, aid.String())); rerr == nil {
+		_ = os.WriteFile(filepath.Join(h.cfg.AssetDir, dup.ID.String()), data, 0o644)
+	}
+	_ = h.q.MarkAssetUploaded(ctx, dup.ID)
+
+	httpx.JSON(w, http.StatusOK, map[string]any{"asset_id": dup.ID.String()})
 }

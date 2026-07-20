@@ -37,22 +37,46 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/estimates/", h.emptyList)
 	r.Get("/workspaces/{slug}/users/notifications", h.notificationsPaginated)
 	r.Get("/timezones/", h.timezones)
-	// notification actions (the inbox is empty in this backend, so per-id actions
-	// are effectively no-ops; mark-all-read is still user-clickable)
+	// notification actions. The inbox has no notification-generation subsystem
+	// (no notifications ever exist in this backend), so every per-id action's
+	// only observable behavior on the Python reference is the ownership-lookup
+	// 404 (`Notification.objects.get(...)` raising `ObjectDoesNotExist`, which
+	// the reference's shared exception handler turns into
+	// {"error": "The required object does not exist."} — see
+	// apps/api/plane/app/views/notification/base.py). mark-all-read is the one
+	// action that doesn't touch a specific id, so it stays a real 200 no-op.
 	r.Post("/workspaces/{slug}/users/notifications/mark-all-read/", h.markAllRead)
-	r.Post("/workspaces/{slug}/users/notifications/{notification_id}/read/", h.noContent)
-	r.Delete("/workspaces/{slug}/users/notifications/{notification_id}/read/", h.noContent)
-	r.Post("/workspaces/{slug}/users/notifications/{notification_id}/archive/", h.noContent)
-	r.Delete("/workspaces/{slug}/users/notifications/{notification_id}/archive/", h.noContent)
-	r.Patch("/workspaces/{slug}/users/notifications/{notification_id}/", h.noContent)
+	r.Post("/workspaces/{slug}/users/notifications/{notification_id}/read/", h.notificationNotFound)
+	r.Delete("/workspaces/{slug}/users/notifications/{notification_id}/read/", h.notificationNotFound)
+	r.Post("/workspaces/{slug}/users/notifications/{notification_id}/archive/", h.notificationNotFound)
+	r.Delete("/workspaces/{slug}/users/notifications/{notification_id}/archive/", h.notificationNotFound)
+	// snooze: Python has no dedicated snooze route — it rides partial_update
+	// (PATCH .../notifications/<pk>/ with a `snoozed_till` body field). Same
+	// get-before-act ownership check, same 404 contract regardless of body.
+	r.Patch("/workspaces/{slug}/users/notifications/{notification_id}/", h.snoozeNotification)
 }
 
 func (h *Handler) markAllRead(w http.ResponseWriter, _ *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"message": "Successful"})
 }
 
-func (h *Handler) noContent(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusNoContent)
+// notificationNotFound backs mark-read, mark-unread, archive, and unarchive.
+// This backend has no notification-generation subsystem, so no notification
+// id is ever real; the only correct, contract-matching response is the same
+// 404 the Python reference gives for a genuinely nonexistent notification.
+func (h *Handler) notificationNotFound(w http.ResponseWriter, _ *http.Request) {
+	httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
+}
+
+// snoozeNotification backs PATCH /users/notifications/{notification_id}/,
+// which the Python reference also uses for snoozing (partial_update restricts
+// the writable fields to snoozed_till — see NotificationViewSet.partial_update
+// in apps/api/plane/app/views/notification/base.py). The reference does its
+// ownership lookup before it ever looks at the body, so an unknown id 404s
+// the same way regardless of what's sent; since no notification exists here
+// either, that 404 is this handler's only reachable response.
+func (h *Handler) snoozeNotification(w http.ResponseWriter, _ *http.Request) {
+	httpx.Error(w, http.StatusNotFound, "The required object does not exist.")
 }
 
 func (h *Handler) sidebarPreferences(w http.ResponseWriter, _ *http.Request) {

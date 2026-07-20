@@ -11,3 +11,12 @@ update assets set is_uploaded = true where id = $1;
 
 -- name: SetProjectCover :exec
 update projects set cover_image_asset = $3, updated_at = now() where id = $1 and workspace_id = $2;
+
+-- name: GetAssetInWorkspace :one
+select * from assets where id = $1 and workspace_id = $2;
+
+-- name: SoftDeleteAsset :exec
+update assets set deleted_at = now() where id = $1;
+
+-- name: RestoreAsset :exec
+update assets set deleted_at = null where id = $1;

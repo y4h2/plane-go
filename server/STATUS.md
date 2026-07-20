@@ -11,8 +11,8 @@ _Last updated: 2026-07-18_
 |---|---|
 | Go route patterns implemented | ~165 distinct paths |
 | Django app-API endpoints (total) | 233 |
-| Contract tests (black-box, Go↔Python parity) | **367, all green on BOTH Go and Python** |
-| Migrations | 0001–0026 |
+| Contract tests (black-box, Go↔Python parity) | **439, all green on BOTH Go and Python** |
+| Migrations | 0001–0030 |
 | Full app runs against Go in a browser | ✅ (signup → onboarding → projects → issues → cycles) |
 
 **Run it:** `docker compose up -d db` → `cd apps/api-go && make migrate-up && WEB_URL=http://localhost make run` (`:4001`).
@@ -67,6 +67,8 @@ sign-up/in/out, get-csrf-token, email-check.
 - **Tail wave (2 agents)** — **deleted-issues** list + **work-item-by-identifier** lookup (`/work-items/{IDENT}-{seq}/`); **module analytics** — modules expose progress counts + distribution embedded in the retrieve/list response (no separate endpoint in Django), wired into `internal/module`'s `.values()`. Integration fixes: issue create now accepts `state_id` (not just `state`); dropped the inert creator auto-subscribe so the identifier endpoint's `is_subscribed` matches Python (false until explicit subscribe). → **357 tests, green on both servers.**
 
 - **Browser-driven fixes (demo walk)** — driving the reused frontend against Go surfaced two whole classes of bug the black-box tests missed: (1) **grouped issue lists** returned bare lists instead of per-group `{results, total_results}` sub-envelopes → Kanban/grouped boards rendered empty (fixed for project + cycle + module lists); (2) **query filters were ignored entirely** → saved views and board filters returned everything. Filtering now honored on project/cycle/module boards + the workspace global list, for both wire forms (flat `?priority=urgent,high` and the JSON blob `filters={"priority__in":...}`), across priority/state/state_group/created_by/parent/estimate_point. Label/assignee/mention/date filters remain unsupported (no such associations in the Go schema). Also: issue create now accepts `state_id`. → **367 tests.**
+
+- **"Implement everything" push (parallel agents + integration)** — closed most of the remaining implementable surface: **advance-analytics** (Overview stat tiles + per-project stats + projects/work-items charts — the workspace Analytics page now shows real counts instead of zeros); **analytic-view / saved-analytic-view CRUD** (mig 0028); **asset restore + duplicate** (mig 0029, added `assets.deleted_at`); **project feature toggles + project-scoped issue search** (mig 0030); **`GET /workspaces/` + project-members** (bug-for-bug 400/shape); **notification snooze + per-id read/unread/archive** (real 404 contract); **module/cycle user-properties + `?module=`/`?cycle=` issue scoping** (mig 0027). Integration fixes: analytic-view join column ambiguity + nullable-uuid scan, workspace-list no-trailing-slash. → **439 tests, green on both servers.**
 
 ## Remaining work — suggested order
 
