@@ -15,6 +15,9 @@ import (
 	"planego/internal/apitoken"
 	"planego/internal/archive"
 	"planego/internal/asset"
+	"planego/internal/bg"
+	"planego/internal/userprofile"
+	"planego/internal/wstheme"
 	"planego/internal/auth"
 	"planego/internal/config"
 	"planego/internal/entityprops"
@@ -59,13 +62,15 @@ func main() {
 		log.Fatalf("db ping: %v", err)
 	}
 
+	dispatcher := bg.New(4, 1024)
+	defer dispatcher.Shutdown(5 * time.Second)
 	q := gen.New(pool)
 	a := auth.New(q, cfg)
 	usr := user.New(q)
 	inst := instance.New()
 	ws := workspace.New(q)
 	proj := project.New(q)
-	iss := issue.New(q)
+	iss := issue.New(q, pool, dispatcher)
 	st := state.New(q)
 	lb := label.New(q)
 	cy := cycle.New(q)
@@ -91,6 +96,8 @@ func main() {
 	ep := entityprops.New(pool)
 	av := analyticview.New(pool)
 	wl := wslist.New(pool)
+	up := userprofile.New(pool)
+	wt := wstheme.New(pool)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -145,6 +152,8 @@ func main() {
 			ep.Routes(r)
 			av.Routes(r)
 			wl.Routes(r)
+			up.Routes(r)
+			wt.Routes(r)
 		})
 	})
 

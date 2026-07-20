@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"planego/internal/activity"
 	"planego/internal/auth"
 	"planego/internal/db/gen"
 	"planego/internal/dbx"
@@ -86,7 +87,17 @@ func (h *Handler) relations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) history(w http.ResponseWriter, r *http.Request) {
-	httpx.JSON(w, http.StatusOK, []any{})
+	iid, err := uuid.Parse(chi.URLParam(r, "issue_id"))
+	if err != nil {
+		httpx.JSON(w, http.StatusOK, []any{})
+		return
+	}
+	entries, err := activity.History(r.Context(), h.pool, iid)
+	if err != nil || entries == nil {
+		httpx.JSON(w, http.StatusOK, []any{})
+		return
+	}
+	httpx.JSON(w, http.StatusOK, entries)
 }
 
 func (h *Handler) descriptionVersions(w http.ResponseWriter, r *http.Request) {

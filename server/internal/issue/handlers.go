@@ -6,6 +6,7 @@ package issue
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,8 +14,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	"planego/internal/activity"
 	"planego/internal/auth"
+	"planego/internal/bg"
 	"planego/internal/db/gen"
 	"planego/internal/dbx"
 	"planego/internal/httpx"
@@ -185,9 +189,28 @@ var allowedGroupBy = map[string]bool{
 	"created_by": true, "cycle_id": true, "target_date": true,
 }
 
-type Handler struct{ q *gen.Queries }
+type Handler struct {
+	q    *gen.Queries
+	pool *pgxpool.Pool
+	bg   *bg.Dispatcher
+}
 
-func New(q *gen.Queries) *Handler { return &Handler{q: q} }
+func New(q *gen.Queries, pool *pgxpool.Pool, dispatcher *bg.Dispatcher) *Handler {
+	return &Handler{q: q, pool: pool, bg: dispatcher}
+}
+
+// recordActivity persists one issue-activity entry off the request path — the
+// goroutine analog of Plane's issue_activity Celery task.
+func (h *Handler) recordActivity(e activity.Entry) {
+	if h.bg == nil || h.pool == nil {
+		return
+	}
+	h.bg.Submit(func(ctx context.Context) {
+		if err := activity.Record(ctx, h.pool, e); err != nil {
+			log.Printf("issue activity: %v", err)
+		}
+	})
+}
 
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/workspaces/{slug}/projects/{project_id}/issues/", h.create)
@@ -296,6 +319,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "The payload is not valid")
 		return
 	}
+	// Record the "created" activity in the background (Celery analog).
+	h.recordActivity(activity.Entry{
+		WorkspaceID: ws.ID, ProjectID: pid, IssueID: i.ID, ActorID: u.ID,
+		Verb: "created", Comment: "created the work item",
+	})
 	// NOTE: we intentionally do NOT auto-subscribe the creator here. Python's
 	// work-item-by-identifier endpoint reports is_subscribed=false for a freshly
 	// created issue and true only after an explicit subscribe (its subquery
@@ -467,7 +495,7 @@ func (h *Handler) retrieve(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	_, pid, ok := h.scope(ctx, w, r)
+	ws, pid, ok := h.scope(ctx, w, r)
 	if !ok {
 		return
 	}
@@ -485,8 +513,13 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		Name     *string `json:"name"`
 		Priority *string `json:"priority"`
 		State    *string `json:"state"`
+		StateID  *string `json:"state_id"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	// the frontend/newer API sends state_id; older payloads send state.
+	if body.State == nil {
+		body.State = body.StateID
+	}
 	name, priority, stateID := i.Name, i.Priority, i.StateID
 	if body.Name != nil {
 		name = *body.Name
@@ -507,6 +540,19 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "The required object does not exist.")
 		return
+	}
+	// Record one "updated" activity per changed field, in the background.
+	if body.Name != nil && name != i.Name {
+		h.recordActivity(activity.Entry{WorkspaceID: ws.ID, ProjectID: pid, IssueID: iid, ActorID: u.ID,
+			Verb: "updated", Field: "name", OldValue: i.Name, NewValue: name})
+	}
+	if body.Priority != nil && priority != i.Priority {
+		h.recordActivity(activity.Entry{WorkspaceID: ws.ID, ProjectID: pid, IssueID: iid, ActorID: u.ID,
+			Verb: "updated", Field: "priority", OldValue: i.Priority, NewValue: priority})
+	}
+	if body.State != nil && dbx.StrOrEmpty(stateID) != dbx.StrOrEmpty(i.StateID) {
+		h.recordActivity(activity.Entry{WorkspaceID: ws.ID, ProjectID: pid, IssueID: iid, ActorID: u.ID,
+			Verb: "updated", Field: "state", OldValue: dbx.StrOrEmpty(i.StateID), NewValue: dbx.StrOrEmpty(stateID)})
 	}
 	w.WriteHeader(http.StatusNoContent) // deliberate: 204 with empty body
 }
