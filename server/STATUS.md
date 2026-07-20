@@ -11,8 +11,9 @@ _Last updated: 2026-07-18_
 |---|---|
 | Go route patterns implemented | ~165 distinct paths |
 | Django app-API endpoints (total) | 233 |
-| Contract tests (black-box, Go↔Python parity) | **439, all green on BOTH Go and Python** |
-| Migrations | 0001–0030 |
+| Contract tests (black-box, Go↔Python parity) | **475 on Go / 472 + 3 skipped on Python** |
+| Migrations | 0001–0033 |
+| Background jobs | goroutine worker pool (`internal/bg`) — replaces Celery |
 | Full app runs against Go in a browser | ✅ (signup → onboarding → projects → issues → cycles) |
 
 **Run it:** `docker compose up -d db` → `cd apps/api-go && make migrate-up && WEB_URL=http://localhost make run` (`:4001`).
@@ -69,6 +70,8 @@ sign-up/in/out, get-csrf-token, email-check.
 - **Browser-driven fixes (demo walk)** — driving the reused frontend against Go surfaced two whole classes of bug the black-box tests missed: (1) **grouped issue lists** returned bare lists instead of per-group `{results, total_results}` sub-envelopes → Kanban/grouped boards rendered empty (fixed for project + cycle + module lists); (2) **query filters were ignored entirely** → saved views and board filters returned everything. Filtering now honored on project/cycle/module boards + the workspace global list, for both wire forms (flat `?priority=urgent,high` and the JSON blob `filters={"priority__in":...}`), across priority/state/state_group/created_by/parent/estimate_point. Label/assignee/mention/date filters remain unsupported (no such associations in the Go schema). Also: issue create now accepts `state_id`. → **367 tests.**
 
 - **"Implement everything" push (parallel agents + integration)** — closed most of the remaining implementable surface: **advance-analytics** (Overview stat tiles + per-project stats + projects/work-items charts — the workspace Analytics page now shows real counts instead of zeros); **analytic-view / saved-analytic-view CRUD** (mig 0028); **asset restore + duplicate** (mig 0029, added `assets.deleted_at`); **project feature toggles + project-scoped issue search** (mig 0030); **`GET /workspaces/` + project-members** (bug-for-bug 400/shape); **notification snooze + per-id read/unread/archive** (real 404 contract); **module/cycle user-properties + `?module=`/`?cycle=` issue scoping** (mig 0027). Integration fixes: analytic-view join column ambiguity + nullable-uuid scan, workspace-list no-trailing-slash. → **439 tests, green on both servers.**
+
+- **Goroutine background jobs (Celery replacement).** `internal/bg` is a worker-pool dispatcher (buffered channel + N goroutines, panic recovery, graceful drain) that replaces Plane's Celery `.delay()` fire-and-forget tasks. Three tasks now run on it, each with an e2e test: **issue activity log** (mig 0032; issue create/update record activity off the request path, `history/` reads it back — Go behavioral e2e, since the Django reference's activity worker 500s in this sandbox); **webhook delivery** (issue events POST an HMAC-signed payload to subscribed webhooks + write webhook_logs — real parity, Python's worker fires here too, incl. its quirk of storing the action in `request_method`); **recent-visits** (mig 0033; project retrieve records a visit, recent-visits reads it — real parity). The other ~30 Celery tasks stay dropped by design (email/SMTP, live-doc version sync, external telemetry, demo-seed).
 
 ## Remaining work — suggested order
 

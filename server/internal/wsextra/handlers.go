@@ -26,8 +26,7 @@ func (h *Handler) Routes(r chi.Router) {
 	r.Get("/workspaces/{slug}/user-favorites/", h.listFavorites)
 	r.Post("/workspaces/{slug}/user-favorites/", h.createFavorite)
 	r.Delete("/workspaces/{slug}/user-favorites/{favorite_id}/", h.deleteFavorite)
-	// home-page reads
-	r.Get("/workspaces/{slug}/recent-visits/", h.emptyList)
+	// home-page reads (recent-visits is served by the recentvisit package now)
 	r.Get("/workspaces/{slug}/quick-links/", h.emptyList)
 	r.Get("/workspaces/{slug}/home-preferences/", h.homePreferences)
 	r.Get("/workspaces/{slug}/stickies/", h.stickies)

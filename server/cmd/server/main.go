@@ -36,6 +36,7 @@ import (
 	"planego/internal/module"
 	"planego/internal/page"
 	"planego/internal/project"
+	"planego/internal/recentvisit"
 	"planego/internal/search"
 	"planego/internal/state"
 	"planego/internal/user"
@@ -69,7 +70,7 @@ func main() {
 	usr := user.New(q)
 	inst := instance.New()
 	ws := workspace.New(q)
-	proj := project.New(q)
+	proj := project.New(q, pool, dispatcher)
 	iss := issue.New(q, pool, dispatcher)
 	st := state.New(q)
 	lb := label.New(q)
@@ -98,6 +99,7 @@ func main() {
 	wl := wslist.New(pool)
 	up := userprofile.New(pool)
 	wt := wstheme.New(pool)
+	rv := recentvisit.New(pool)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -156,6 +158,7 @@ func main() {
 			wl.Routes(r)
 			up.Routes(r)
 			wt.Routes(r)
+			rv.Routes(r)
 		})
 	})
 

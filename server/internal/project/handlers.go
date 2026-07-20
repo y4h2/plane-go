@@ -18,19 +18,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"planego/internal/auth"
+	"planego/internal/bg"
 	"planego/internal/db/gen"
 	"planego/internal/dbx"
 	"planego/internal/httpx"
+	"planego/internal/recentvisit"
 	"planego/internal/state"
 )
 
 const roleAdmin = 20
 
-type Handler struct{ q *gen.Queries }
+type Handler struct {
+	q    *gen.Queries
+	pool *pgxpool.Pool
+	bg   *bg.Dispatcher
+}
 
-func New(q *gen.Queries) *Handler { return &Handler{q: q} }
+func New(q *gen.Queries, pool *pgxpool.Pool, dispatcher *bg.Dispatcher) *Handler {
+	return &Handler{q: q, pool: pool, bg: dispatcher}
+}
 
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/workspaces/{slug}/projects/", h.create)
@@ -358,6 +367,13 @@ func (h *Handler) retrieve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := int(pm.Role)
+	// Record the visit in the background (recent_visited_task Celery analog).
+	if h.bg != nil && h.pool != nil {
+		wsID, uid := ws.ID, u.ID
+		h.bg.Submit(func(bgctx context.Context) {
+			recentvisit.Record(bgctx, h.pool, wsID, uid, pid, pid, "project")
+		})
+	}
 	httpx.JSON(w, http.StatusOK, projectResp(p, &role, h.memberIDs(ctx, pid)))
 }
 
