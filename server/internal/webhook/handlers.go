@@ -393,7 +393,8 @@ func (h *Handler) logs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.pool.Query(ctx, `
-		select id, event_type, request_method, response_status, retry_count, created_at
+		select id, event_type, request_method, request_headers, request_body,
+		       response_status, response_headers, response_body, retry_count, created_at
 		from webhook_logs where workspace_id = $1 and webhook = $2 and deleted_at is null
 		order by created_at desc
 	`, wsID, wid)
@@ -405,22 +406,33 @@ func (h *Handler) logs(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0)
 	for rows.Next() {
 		var (
-			id                                       uuid.UUID
-			eventType, requestMethod, responseStatus *string
-			retryCount                               int16
-			createdAt                                time.Time
+			id                                                                       uuid.UUID
+			eventType, requestMethod, requestHeaders, requestBody                    *string
+			responseStatus, responseHeaders, responseBody                            *string
+			retryCount                                                               int16
+			createdAt                                                                time.Time
 		)
-		if err := rows.Scan(&id, &eventType, &requestMethod, &responseStatus, &retryCount, &createdAt); err != nil {
+		if err := rows.Scan(&id, &eventType, &requestMethod, &requestHeaders, &requestBody,
+			&responseStatus, &responseHeaders, &responseBody, &retryCount, &createdAt); err != nil {
 			continue
 		}
 		out = append(out, map[string]any{
-			"id":              id.String(),
-			"event_type":      eventType,
-			"request_method":  requestMethod,
-			"response_status": responseStatus,
-			"retry_count":     int(retryCount),
-			"created_at":      createdAt,
-			"webhook":         wid.String(),
+			"id":               id.String(),
+			"created_at":       createdAt,
+			"updated_at":       createdAt,
+			"deleted_at":       nil,
+			"webhook":          wid.String(),
+			"workspace":        wsID.String(),
+			"event_type":       eventType,
+			"request_method":   requestMethod,
+			"request_headers":  requestHeaders,
+			"request_body":     requestBody,
+			"response_status":  responseStatus,
+			"response_headers": responseHeaders,
+			"response_body":    responseBody,
+			"retry_count":      int(retryCount),
+			"created_by":       nil,
+			"updated_by":       nil,
 		})
 	}
 	httpx.JSON(w, http.StatusOK, out)

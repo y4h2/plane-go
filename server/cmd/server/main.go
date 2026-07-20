@@ -102,7 +102,9 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+	// health accepts any method so it can double as a loopback webhook-delivery
+	// target in tests.
+	r.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 

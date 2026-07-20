@@ -22,6 +22,7 @@ import (
 	"planego/internal/db/gen"
 	"planego/internal/dbx"
 	"planego/internal/httpx"
+	"planego/internal/webhookdelivery"
 )
 
 // Filter captures the issue-list filter query params Go can evaluate against its
@@ -212,6 +213,17 @@ func (h *Handler) recordActivity(e activity.Entry) {
 	})
 }
 
+// fireWebhook delivers an issue event to subscribed webhooks off the request
+// path — the goroutine analog of Plane's webhook_task Celery worker.
+func (h *Handler) fireWebhook(wsID uuid.UUID, action string, data map[string]any) {
+	if h.bg == nil || h.pool == nil {
+		return
+	}
+	h.bg.Submit(func(ctx context.Context) {
+		webhookdelivery.Fire(ctx, h.pool, wsID, "issue", action, data)
+	})
+}
+
 func (h *Handler) Routes(r chi.Router) {
 	r.Post("/workspaces/{slug}/projects/{project_id}/issues/", h.create)
 	r.Get("/workspaces/{slug}/projects/{project_id}/issues/", h.list)
@@ -319,11 +331,12 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "The payload is not valid")
 		return
 	}
-	// Record the "created" activity in the background (Celery analog).
+	// Record the "created" activity + deliver webhooks in the background.
 	h.recordActivity(activity.Entry{
 		WorkspaceID: ws.ID, ProjectID: pid, IssueID: i.ID, ActorID: u.ID,
 		Verb: "created", Comment: "created the work item",
 	})
+	h.fireWebhook(ws.ID, "created", Values(i))
 	// NOTE: we intentionally do NOT auto-subscribe the creator here. Python's
 	// work-item-by-identifier endpoint reports is_subscribed=false for a freshly
 	// created issue and true only after an explicit subscribe (its subquery
@@ -554,6 +567,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 		h.recordActivity(activity.Entry{WorkspaceID: ws.ID, ProjectID: pid, IssueID: iid, ActorID: u.ID,
 			Verb: "updated", Field: "state", OldValue: dbx.StrOrEmpty(i.StateID), NewValue: dbx.StrOrEmpty(stateID)})
 	}
+	h.fireWebhook(ws.ID, "updated", map[string]any{"id": iid.String(), "name": name, "priority": priority})
 	w.WriteHeader(http.StatusNoContent) // deliberate: 204 with empty body
 }
 
